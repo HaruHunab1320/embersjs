@@ -2,7 +2,7 @@
  * Factory functions for creating Capabilities and Subscriptions.
  */
 
-import type { Capability, CapabilityKind, Subscription, AccessCondition } from "../types.js";
+import type { AccessCondition, Capability, CapabilityKind, Subscription } from "../types.js";
 
 /**
  * Creates a Capability.

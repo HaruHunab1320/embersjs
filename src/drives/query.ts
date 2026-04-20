@@ -56,19 +56,13 @@ export function dominantTier(stack: DriveStack): number | undefined {
  * Returns true if all drives in the given tier meet the satisfaction threshold.
  */
 export function isTierSatisfied(stack: DriveStack, tier: number, threshold: number): boolean {
-  let hasDrivesInTier = false;
-
   for (const drive of stack.drives.values()) {
-    if (drive.tier === tier) {
-      hasDrivesInTier = true;
-      if (drive.level < threshold) {
-        return false;
-      }
+    if (drive.tier === tier && drive.level < threshold) {
+      return false;
     }
   }
-
   // A tier with no drives is vacuously satisfied
-  return hasDrivesInTier || true;
+  return true;
 }
 
 /**

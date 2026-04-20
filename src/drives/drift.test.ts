@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { applyDrift } from "./drift.js";
+import { describe, expect, it } from "vitest";
 import type { DriftFunction } from "../types.js";
+import { applyDrift } from "./drift.js";
 
 const MS_PER_HOUR = 3_600_000;
 
@@ -69,7 +69,7 @@ describe("applyDrift", () => {
     it("applies the custom compute function", () => {
       const drift: DriftFunction = {
         kind: "custom",
-        compute: (current, dtMs) => current - dtMs / MS_PER_HOUR * 0.2,
+        compute: (current, dtMs) => current - (dtMs / MS_PER_HOUR) * 0.2,
       };
       const result = applyDrift(drift, 1.0, MS_PER_HOUR);
       expect(result).toBeCloseTo(0.8, 10);

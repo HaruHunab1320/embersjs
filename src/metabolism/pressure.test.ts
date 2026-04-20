@@ -1,10 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { computeFeltPressures, dominantDrives, totalFeltPressure } from "./pressure.js";
+import { describe, expect, it } from "vitest";
 import { createDriveStack } from "../drives/construct.js";
-import { composeEffects } from "../practices/effects.js";
 import { createPracticeSet } from "../practices/construct.js";
-
-const MS_PER_HOUR = 3_600_000;
+import { composeEffects } from "../practices/effects.js";
+import { computeFeltPressures, dominantDrives, totalFeltPressure } from "./pressure.js";
 
 function makeStack() {
   return createDriveStack({

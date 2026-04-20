@@ -7,8 +7,7 @@
  */
 
 import type { DriftFunction } from "../types.js";
-
-const MS_PER_HOUR = 3_600_000;
+import { clamp01, MS_PER_HOUR } from "../util.js";
 
 /**
  * Applies a drift function to a current level over a time delta.
@@ -29,7 +28,7 @@ export function applyDrift(drift: DriftFunction, current: number, dtMs: number):
     case "exponential": {
       // Half-life decay: level * (0.5 ^ (dt / halfLife))
       const hours = dtMs / MS_PER_HOUR;
-      next = current * Math.pow(0.5, hours / drift.halfLifeHours);
+      next = current * 0.5 ** (hours / drift.halfLifeHours);
       break;
     }
     case "custom": {
@@ -39,8 +38,4 @@ export function applyDrift(drift: DriftFunction, current: number, dtMs: number):
   }
 
   return clamp01(next);
-}
-
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value));
 }

@@ -1,9 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { determineOrientation } from "./orientation.js";
-import { computeFeltPressures } from "./pressure.js";
-import { composeEffects } from "../practices/effects.js";
+import { describe, expect, it } from "vitest";
 import { createDriveStack } from "../drives/construct.js";
 import { createPracticeSet } from "../practices/construct.js";
+import { composeEffects } from "../practices/effects.js";
+import { determineOrientation } from "./orientation.js";
+import { computeFeltPressures } from "./pressure.js";
 
 function orient(driveLevels: Record<string, number>, practiceDepths: Record<string, number>) {
   const stack = createDriveStack({
@@ -33,10 +33,7 @@ function orient(driveLevels: Record<string, number>, practiceDepths: Record<stri
 
 describe("determineOrientation", () => {
   it("returns 'clear' when drives satisfied and practices decent", () => {
-    const result = orient(
-      { a: 0.85, b: 0.9 },
-      { gratitudePractice: 0.5, integrityPractice: 0.5 },
-    );
+    const result = orient({ a: 0.85, b: 0.9 }, { gratitudePractice: 0.5, integrityPractice: 0.5 });
     expect(result).toBe("clear");
   });
 
@@ -54,10 +51,7 @@ describe("determineOrientation", () => {
   });
 
   it("returns 'stretched' when drives pressing and practices moderate", () => {
-    const result = orient(
-      { a: 0.2, b: 0.3 },
-      { gratitudePractice: 0.25 },
-    );
+    const result = orient({ a: 0.2, b: 0.3 }, { gratitudePractice: 0.25 });
     expect(result).toBe("stretched");
   });
 

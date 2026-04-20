@@ -16,80 +16,71 @@
 // Public API — the five integration points + construction
 // ---------------------------------------------------------------------------
 
+export type { SerializedBeing } from "./being/index.js";
 export {
+  availableCapabilities,
   createBeing,
-  tick,
+  describe,
+  deserializeBeing,
   integrate,
   metabolize,
-  weightAttention,
-  availableCapabilities,
-  describe,
   serializeBeing,
-  deserializeBeing,
+  tick,
+  weightAttention,
 } from "./being/index.js";
-
-export type { SerializedBeing } from "./being/index.js";
 
 // ---------------------------------------------------------------------------
 // Core types — the library's public contract
 // ---------------------------------------------------------------------------
 
 export type {
-  // Drive types
-  Drive,
-  DriveStack,
-  DriftFunction,
-  DominationRules,
-  SatiationBinding,
-  EventMatcher,
+  AccessCondition,
   ActionMatcher,
-  StateMatcher,
-
-  // Practice types
-  Practice,
-  PracticeSet,
-  DecayFunction,
-  PracticeStrengthener,
-  PracticeEffect,
-
+  // Attention types
+  AttentionCandidate,
+  // Being
+  Being,
+  BeingConfig,
+  BeingState,
   // Capability & subscription types
   Capability,
   CapabilityKind,
-  Subscription,
-  AccessCondition,
-
-  // Being
-  Being,
-  BeingState,
-  History,
-
-  // History detail types
-  DriveTrajectoryPoint,
-  PracticeMilestone,
-  PressuredChoice,
-  Transition,
-
-  // Integration types
-  IntegrationEvent,
-  IntegrationAction,
-  IntegrationInput,
-  IntegrationResult,
-
-  // Metabolism output types
-  InnerSituation,
-  Orientation,
-  DriveSummary,
-  PracticeSummary,
-
-  // Attention types
-  AttentionCandidate,
-  WeightedCandidate,
-
+  CustomPracticeConfig,
+  DecayFunction,
+  DominationRules,
+  DriftFunction,
+  // Drive types
+  Drive,
   // Configuration types
   DriveConfig,
+  DriveStack,
   DriveStackConfig,
+  DriveSummary,
+  // History detail types
+  DriveTrajectoryPoint,
+  EventMatcher,
+  History,
+  // Metabolism output types
+  InnerSituation,
+  IntegrationAction,
+  // Integration types
+  IntegrationEvent,
+  IntegrationInput,
+  IntegrationResult,
+  Orientation,
+  // Practice types
+  Practice,
+  PracticeEffect,
+  PracticeMilestone,
   PracticeSeed,
-  CustomPracticeConfig,
+  PracticeSet,
   PracticeSetConfig,
-  BeingConfig,
+  PracticeStrengthener,
+  PracticeSummary,
+  PressuredChoice,
+  SatiationBinding,
+  StateMatcher,
+  Subscription,
+  Transition,
+  WeightedCandidate,
 } from "./types.js";

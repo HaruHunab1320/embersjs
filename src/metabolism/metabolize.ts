@@ -7,11 +7,11 @@
  * capability access decisions by the consuming framework.
  */
 
-import type { Being, InnerSituation } from "../types.js";
 import { composeEffects } from "../practices/effects.js";
-import { computeFeltPressures, dominantDrives } from "./pressure.js";
-import { determineOrientation } from "./orientation.js";
+import type { Being, InnerSituation } from "../types.js";
 import { composeFelt, toDriveSummary, toPracticeSummary } from "./felt-templates.js";
+import { determineOrientation } from "./orientation.js";
+import { computeFeltPressures, dominantDrives } from "./pressure.js";
 
 /**
  * Metabolizes a Being's current drive and practice state into an InnerSituation.
@@ -46,9 +46,7 @@ export function metabolize(being: Being): InnerSituation {
   const felt = composeFelt(orientation, dominant, practiceSummaries, effects);
 
   // 7. Build drive summaries
-  const driveSummaries = dominant
-    .filter((p) => p.feltPressure > 0.01)
-    .map(toDriveSummary);
+  const driveSummaries = dominant.filter((p) => p.feltPressure > 0.01).map(toDriveSummary);
 
   return {
     dominantDrives: driveSummaries,

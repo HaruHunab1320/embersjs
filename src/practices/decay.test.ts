@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { applyDecay } from "./decay.js";
+import { describe, expect, it } from "vitest";
 import type { DecayFunction } from "../types.js";
+import { applyDecay } from "./decay.js";
 
 const MS_PER_HOUR = 3_600_000;
 

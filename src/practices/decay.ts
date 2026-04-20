@@ -7,8 +7,7 @@
  */
 
 import type { DecayFunction } from "../types.js";
-
-const MS_PER_HOUR = 3_600_000;
+import { clamp01, MS_PER_HOUR } from "../util.js";
 
 /**
  * Applies a decay function to a current depth over a time delta.
@@ -31,7 +30,7 @@ export function applyDecay(decay: DecayFunction, current: number, dtMs: number):
     }
     case "exponential": {
       const hours = dtMs / MS_PER_HOUR;
-      next = current * Math.pow(0.5, hours / decay.halfLifeHours);
+      next = current * 0.5 ** (hours / decay.halfLifeHours);
       break;
     }
     case "custom": {
@@ -41,8 +40,4 @@ export function applyDecay(decay: DecayFunction, current: number, dtMs: number):
   }
 
   return clamp01(next);
-}
-
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value));
 }

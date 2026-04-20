@@ -2,9 +2,9 @@
  * Human-readable debug description of a Being's current state.
  */
 
-import type { Being } from "../types.js";
 import { drivePressure } from "../drives/query.js";
 import { metabolize } from "../metabolism/metabolize.js";
+import type { Being } from "../types.js";
 
 /**
  * Returns a human-readable debug dump of the being's current state.
@@ -21,7 +21,10 @@ export function describe(being: Being): string {
 
   // Drives
   lines.push("Drives:");
-  const drivesByTier = new Map<number, typeof being.drives.drives extends Map<string, infer V> ? V[] : never>();
+  const drivesByTier = new Map<
+    number,
+    typeof being.drives.drives extends Map<string, infer V> ? V[] : never
+  >();
   for (const drive of being.drives.drives.values()) {
     const tier = drivesByTier.get(drive.tier) ?? [];
     tier.push(drive);
@@ -71,7 +74,7 @@ export function describe(being: Being): string {
 
 function levelBar(value: number): string {
   const filled = Math.round(value * 10);
-  return "[" + "█".repeat(filled) + "░".repeat(10 - filled) + "]";
+  return `[${"█".repeat(filled)}${"░".repeat(10 - filled)}]`;
 }
 
 function formatMs(ms: number): string {

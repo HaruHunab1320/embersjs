@@ -7,15 +7,16 @@
  */
 
 import type {
-  Practice,
-  PracticeSet,
-  PracticeSetConfig,
-  PracticeSeed,
   CustomPracticeConfig,
   DecayFunction,
-  PracticeStrengthener,
+  Practice,
   PracticeEffect,
+  PracticeSeed,
+  PracticeSet,
+  PracticeSetConfig,
+  PracticeStrengthener,
 } from "../types.js";
+import { clamp01 } from "../util.js";
 
 // ---------------------------------------------------------------------------
 // Core practice defaults
@@ -265,8 +266,4 @@ export function createPracticeSet(config: PracticeSetConfig): PracticeSet {
  */
 export function corePracticeIds(): string[] {
   return Object.keys(CORE_PRACTICES);
-}
-
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value));
 }

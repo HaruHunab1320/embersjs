@@ -1,9 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { tickPractices } from "./tick.js";
+import { describe, expect, it } from "vitest";
 import { createPracticeSet } from "./construct.js";
+import { tickPractices } from "./tick.js";
 
 const MS_PER_HOUR = 3_600_000;
-const MS_PER_DAY = MS_PER_HOUR * 24;
 
 describe("tickPractices", () => {
   function makeSet() {
@@ -69,9 +68,7 @@ describe("tickPractices", () => {
 
   it("exponential-decay practice decays more slowly", () => {
     const set = createPracticeSet({
-      seeds: [
-        { id: "creatorConnection", initialDepth: 0.8 },
-      ],
+      seeds: [{ id: "creatorConnection", initialDepth: 0.8 }],
     });
 
     // creatorConnection has exponential decay with halfLife 168 hours (1 week)

@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { availableCapabilities } from "./available.js";
+import { describe, expect, it } from "vitest";
 import type { Being, Capability, Subscription } from "../types.js";
+import { availableCapabilities } from "./available.js";
 
 function makeBeing(config: {
   driveLevels?: Record<string, { tier: number; level: number }>;

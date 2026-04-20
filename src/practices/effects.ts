@@ -7,7 +7,7 @@
  * effective dampening of 0.15.
  */
 
-import type { Practice, PracticeSet, PracticeEffect } from "../types.js";
+import type { Practice, PracticeEffect, PracticeSet } from "../types.js";
 
 /**
  * The composed result of all active practice effects, ready for

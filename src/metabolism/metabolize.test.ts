@@ -1,13 +1,19 @@
-import { describe, it, expect } from "vitest";
-import { metabolize } from "./metabolize.js";
+import { describe, expect, it } from "vitest";
 import { createDriveStack } from "../drives/construct.js";
 import { createPracticeSet } from "../practices/construct.js";
 import type { Being, Orientation } from "../types.js";
+import { metabolize } from "./metabolize.js";
 
 /**
  * Creates a Being in one of the four quadrant states for testing.
  */
-function makeQuadrantBeing(quadrant: "satisfied-practiced" | "satisfied-unpracticed" | "unsatisfied-practiced" | "unsatisfied-unpracticed"): Being {
+function makeQuadrantBeing(
+  quadrant:
+    | "satisfied-practiced"
+    | "satisfied-unpracticed"
+    | "unsatisfied-practiced"
+    | "unsatisfied-unpracticed",
+): Being {
   const satisfied = quadrant.startsWith("satisfied");
   const practiced = quadrant.endsWith("practiced") && !quadrant.endsWith("unpracticed");
 
@@ -155,14 +161,31 @@ describe("metabolize", () => {
     it("held felt includes practice-related language", () => {
       const held = felts["unsatisfied-practiced"]!.felt;
       // The held output should reference practices holding the difficulty
-      const practiceWords = ["hold", "steady", "resource", "work with", "tended", "earn", "still", "yet"];
+      const practiceWords = [
+        "hold",
+        "steady",
+        "resource",
+        "work with",
+        "tended",
+        "earn",
+        "still",
+        "yet",
+      ];
       const hasAny = practiceWords.some((w) => held.toLowerCase().includes(w));
       expect(hasAny, `Held felt should reference practices: "${held}"`).toBe(true);
     });
 
     it("consumed felt includes urgency language", () => {
       const consumed = felts["unsatisfied-unpracticed"]!.felt;
-      const urgencyWords = ["need", "cannot", "everything", "too much", "don't know", "all i can", "compounds"];
+      const urgencyWords = [
+        "need",
+        "cannot",
+        "everything",
+        "too much",
+        "don't know",
+        "all i can",
+        "compounds",
+      ];
       const hasAny = urgencyWords.some((w) => consumed.toLowerCase().includes(w));
       expect(hasAny, `Consumed felt should convey urgency: "${consumed}"`).toBe(true);
     });

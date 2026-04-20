@@ -1,8 +1,8 @@
-import { describe as describeTest, it, expect } from "vitest";
+import { describe as describeTest, expect, it } from "vitest";
+import type { BeingConfig } from "../types.js";
 import { createBeing } from "./create.js";
 import { describe } from "./describe.js";
 import { tick } from "./lifecycle.js";
-import type { BeingConfig } from "../types.js";
 
 function poeConfig(): BeingConfig {
   return {

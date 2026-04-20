@@ -1,14 +1,14 @@
-import { describe, it, expect } from "vitest";
-import {
-  drivePressure,
-  weightedPressure,
-  pressingDrives,
-  dominantTier,
-  isTierSatisfied,
-  drivesInTier,
-  topDrivesByPressure,
-} from "./query.js";
+import { describe, expect, it } from "vitest";
 import { createDriveStack } from "./construct.js";
+import {
+  dominantTier,
+  drivePressure,
+  drivesInTier,
+  isTierSatisfied,
+  pressingDrives,
+  topDrivesByPressure,
+  weightedPressure,
+} from "./query.js";
 
 function makeStack() {
   return createDriveStack({

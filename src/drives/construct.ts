@@ -3,12 +3,13 @@
  */
 
 import type {
-  Drive,
-  DriveStack,
-  DriveConfig,
-  DriveStackConfig,
   DominationRules,
+  Drive,
+  DriveConfig,
+  DriveStack,
+  DriveStackConfig,
 } from "../types.js";
+import { clamp01 } from "../util.js";
 
 /** Default domination rules per the architecture spec. */
 const DEFAULT_DOMINATION_RULES: DominationRules = {
@@ -66,8 +67,4 @@ export function createDriveStack(config: DriveStackConfig): DriveStack {
       ...config.dominationRules,
     },
   };
-}
-
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value));
 }

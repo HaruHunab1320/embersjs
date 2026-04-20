@@ -20,7 +20,10 @@ export interface CapabilityDiff {
  * @param before - capabilities available before
  * @param after - capabilities available after
  */
-export function capabilityDiff(before: readonly Capability[], after: readonly Capability[]): CapabilityDiff {
+export function capabilityDiff(
+  before: readonly Capability[],
+  after: readonly Capability[],
+): CapabilityDiff {
   const beforeIds = new Set(before.map((c) => c.id));
   const afterIds = new Set(after.map((c) => c.id));
 

@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
-import { satiateDrives } from "./satiate.js";
+import { describe, expect, it } from "vitest";
+import type { IntegrationAction, IntegrationEvent } from "../types.js";
 import { createDriveStack } from "./construct.js";
-import type { IntegrationEvent, IntegrationAction } from "../types.js";
+import { satiateDrives } from "./satiate.js";
 
 function makeStack() {
   return createDriveStack({
@@ -23,7 +23,7 @@ function makeStack() {
             matches: {
               kind: "event",
               type: "guest-arrived",
-              predicate: (e) => e.payload?.["returning"] === true,
+              predicate: (e) => e.payload?.returning === true,
             },
             amount: 0.15,
           },
@@ -38,9 +38,7 @@ function makeStack() {
         initialLevel: 0.8,
         target: 0.9,
         drift: { kind: "linear", ratePerHour: -0.02 },
-        satiatedBy: [
-          { matches: { kind: "event", type: "integrity-check-passed" }, amount: 0.15 },
-        ],
+        satiatedBy: [{ matches: { kind: "event", type: "integrity-check-passed" }, amount: 0.15 }],
       },
       {
         id: "connection",
@@ -51,9 +49,7 @@ function makeStack() {
         initialLevel: 0.3,
         target: 0.6,
         drift: { kind: "linear", ratePerHour: -0.05 },
-        satiatedBy: [
-          { matches: { kind: "event", type: "meaningful-exchange" }, amount: 0.25 },
-        ],
+        satiatedBy: [{ matches: { kind: "event", type: "meaningful-exchange" }, amount: 0.25 }],
       },
     ],
   });

@@ -1,9 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
+  corePracticeIds,
   createCorePractice,
   createCustomPractice,
   createPracticeSet,
-  corePracticeIds,
 } from "./construct.js";
 
 describe("corePracticeIds", () => {
@@ -65,9 +65,9 @@ describe("createCorePractice", () => {
   });
 
   it("throws on unknown core practice id", () => {
-    expect(() =>
-      createCorePractice({ id: "nonexistent", initialDepth: 0.5 }),
-    ).toThrow('Unknown core practice id: "nonexistent"');
+    expect(() => createCorePractice({ id: "nonexistent", initialDepth: 0.5 })).toThrow(
+      'Unknown core practice id: "nonexistent"',
+    );
   });
 
   it("accepts overrides for decay, strengthens, and effects", () => {

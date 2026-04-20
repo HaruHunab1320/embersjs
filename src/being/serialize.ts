@@ -12,13 +12,12 @@
 
 import type {
   Being,
+  DecayFunction,
+  DriftFunction,
   Drive,
   DriveStack,
-  DriftFunction,
-  Practice,
-  PracticeSet,
-  DecayFunction,
   History,
+  Practice,
 } from "../types.js";
 
 /**

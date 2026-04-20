@@ -3,14 +3,10 @@
  * weight them by how relevant they are to the being's current inner state.
  */
 
-import type {
-  Being,
-  AttentionCandidate,
-  WeightedCandidate,
-} from "../types.js";
-import { computeFeltPressures } from "./pressure.js";
 import { composeEffects } from "../practices/effects.js";
 import { averagePracticeDepth } from "../practices/query.js";
+import type { AttentionCandidate, Being, WeightedCandidate } from "../types.js";
+import { computeFeltPressures } from "./pressure.js";
 
 /**
  * Weights attention candidates based on the being's drive pressure

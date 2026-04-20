@@ -1,9 +1,9 @@
-import { describe, it, expect } from "vitest";
-import { strengthenPractices } from "./strengthen.js";
-import { createPracticeSet } from "./construct.js";
+import { describe, expect, it } from "vitest";
 import { createDriveStack } from "../drives/construct.js";
+import type { DriveStack, IntegrationAction, IntegrationEvent } from "../types.js";
+import { createPracticeSet } from "./construct.js";
+import { strengthenPractices } from "./strengthen.js";
 import { tickPractices } from "./tick.js";
-import type { IntegrationAction, IntegrationEvent, DriveStack } from "../types.js";
 
 const MS_PER_HOUR = 3_600_000;
 

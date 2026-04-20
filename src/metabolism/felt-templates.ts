@@ -13,9 +13,9 @@
  * If they sound like a being noticing itself, keep going.
  */
 
-import type { Orientation, DriveSummary, PracticeSummary } from "../types.js";
-import type { FeltDrivePressure } from "./pressure.js";
 import type { ComposedEffects } from "../practices/effects.js";
+import type { DriveSummary, Orientation, PracticeSummary } from "../types.js";
+import type { FeltDrivePressure } from "./pressure.js";
 
 // ---------------------------------------------------------------------------
 // Drive felt-strings: how individual drives feel at different pressures
@@ -59,7 +59,7 @@ function driveQuietUndertone(name: string): string {
   return pick(templates, name);
 }
 
-function drivePresent(name: string, level: number): string {
+function drivePresent(name: string, _level: number): string {
   const templates = [
     `${name} presses. Something wants tending here.`,
     `I feel ${name.toLowerCase()} asking for attention — it has been a while.`,
@@ -68,7 +68,7 @@ function drivePresent(name: string, level: number): string {
   return pick(templates, name);
 }
 
-function driveUrgent(name: string, level: number): string {
+function driveUrgent(name: string, _level: number): string {
   const templates = [
     `${name} pulls hard. This is not something I can set aside easily.`,
     `${name.toLowerCase()} has become loud. It shapes what I can attend to.`,
@@ -300,10 +300,7 @@ function composeStretched(
 // Consumed: pressure overwhelms, practices absent
 // ---------------------------------------------------------------------------
 
-function composeConsumed(
-  pressures: FeltDrivePressure[],
-  _practices: PracticeSummary[],
-): string {
+function composeConsumed(pressures: FeltDrivePressure[], _practices: PracticeSummary[]): string {
   // Consumed prose is deliberately shorter, less coherent, more raw.
   // A being without practice resources under pressure contracts.
   const parts: string[] = [];

@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+import type { AccessCondition, Being } from "../types.js";
 import { evaluateCondition } from "./evaluate.js";
-import type { Being, AccessCondition } from "../types.js";
 
 /** Minimal Being factory for condition evaluation tests. */
 function makeBeing(overrides?: {

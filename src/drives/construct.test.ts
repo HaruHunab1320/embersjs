@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { createDrive, createDriveStack } from "./construct.js";
+import { describe, expect, it } from "vitest";
 import type { DriveConfig, DriveStackConfig } from "../types.js";
+import { createDrive, createDriveStack } from "./construct.js";
 
 describe("createDrive", () => {
   const config: DriveConfig = {

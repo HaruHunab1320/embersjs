@@ -1,18 +1,18 @@
 export {
+  corePracticeIds,
   createCorePractice,
   createCustomPractice,
   createPracticeSet,
-  corePracticeIds,
 } from "./construct.js";
 export { applyDecay } from "./decay.js";
-export { tickPractices } from "./tick.js";
-export { strengthenPractices } from "./strengthen.js";
+export type { ComposedEffects } from "./effects.js";
+export { composeEffects } from "./effects.js";
 export {
-  practiceDepth,
-  hasPracticeAtDepth,
-  practicesByDepth,
   activePractices,
   averagePracticeDepth,
+  hasPracticeAtDepth,
+  practiceDepth,
+  practicesByDepth,
 } from "./query.js";
-export { composeEffects } from "./effects.js";
-export type { ComposedEffects } from "./effects.js";
+export { strengthenPractices } from "./strengthen.js";
+export { tickPractices } from "./tick.js";

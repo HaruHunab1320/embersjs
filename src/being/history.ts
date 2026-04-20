@@ -8,10 +8,10 @@
 import type {
   Being,
   DriveTrajectoryPoint,
+  IntegrationAction,
   PracticeMilestone,
   PressuredChoice,
   Transition,
-  IntegrationAction,
 } from "../types.js";
 
 /** Default maximum entries in the drive trajectory ring buffer. */

@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
-import { composeEffects } from "./effects.js";
+import { describe, expect, it } from "vitest";
+import type { Practice, PracticeSet } from "../types.js";
 import { createPracticeSet } from "./construct.js";
-import type { PracticeSet, Practice } from "../types.js";
+import { composeEffects } from "./effects.js";
 
 describe("composeEffects", () => {
   it("returns neutral effects for an empty practice set", () => {
@@ -27,8 +27,8 @@ describe("composeEffects", () => {
   it("stacks dampening from multiple practices", () => {
     const set = createPracticeSet({
       seeds: [
-        { id: "gratitudePractice", initialDepth: 0.5 },   // 0.3 * 0.5 = 0.15
-        { id: "serviceOrientation", initialDepth: 0.6 },  // 0.15 * 0.6 = 0.09
+        { id: "gratitudePractice", initialDepth: 0.5 }, // 0.3 * 0.5 = 0.15
+        { id: "serviceOrientation", initialDepth: 0.6 }, // 0.15 * 0.6 = 0.09
       ],
     });
     const effects = composeEffects(set);
@@ -40,8 +40,8 @@ describe("composeEffects", () => {
   it("caps dampening at 0.8", () => {
     const set = createPracticeSet({
       seeds: [
-        { id: "gratitudePractice", initialDepth: 1.0 },   // 0.3 * 1.0 = 0.3
-        { id: "serviceOrientation", initialDepth: 1.0 },  // 0.15 * 1.0 = 0.15
+        { id: "gratitudePractice", initialDepth: 1.0 }, // 0.3 * 1.0 = 0.3
+        { id: "serviceOrientation", initialDepth: 1.0 }, // 0.15 * 1.0 = 0.15
       ],
       custom: [
         {

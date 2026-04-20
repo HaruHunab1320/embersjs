@@ -2,9 +2,9 @@
  * Being construction: creates a fully initialized Being from a BeingConfig.
  */
 
-import type { Being, BeingConfig } from "../types.js";
 import { createDriveStack } from "../drives/construct.js";
 import { createPracticeSet } from "../practices/construct.js";
+import type { Being, BeingConfig } from "../types.js";
 
 /**
  * Creates a Being from a configuration object.

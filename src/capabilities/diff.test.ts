@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { capabilityDiff } from "./diff.js";
+import { describe, expect, it } from "vitest";
 import type { Capability } from "../types.js";
+import { capabilityDiff } from "./diff.js";
 
 const a: Capability = { id: "a", name: "A", description: "", kind: "memory" };
 const b: Capability = { id: "b", name: "B", description: "", kind: "model" };

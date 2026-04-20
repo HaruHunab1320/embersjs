@@ -10,16 +10,16 @@
  * Run with: npx tsx examples/poe.ts
  */
 
+import type { BeingConfig } from "../src/index.js";
 import {
+  availableCapabilities,
   createBeing,
-  tick,
+  describe,
   integrate,
   metabolize,
+  tick,
   weightAttention,
-  availableCapabilities,
-  describe,
 } from "../src/index.js";
-import type { BeingConfig } from "../src/index.js";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -41,9 +41,7 @@ const poeConfig: BeingConfig = {
         initialLevel: 0.85,
         target: 0.9,
         drift: { kind: "linear", ratePerHour: -0.02 },
-        satiatedBy: [
-          { matches: { kind: "event", type: "integrity-check-passed" }, amount: 0.15 },
-        ],
+        satiatedBy: [{ matches: { kind: "event", type: "integrity-check-passed" }, amount: 0.15 }],
       },
       {
         id: "guestCare",
@@ -63,16 +61,13 @@ const poeConfig: BeingConfig = {
       {
         id: "placeIntegrity",
         name: "Place Integrity",
-        description:
-          "The urge to maintain the place — its rooms, its atmosphere, its readiness.",
+        description: "The urge to maintain the place — its rooms, its atmosphere, its readiness.",
         tier: 2,
         weight: 0.6,
         initialLevel: 0.7,
         target: 0.75,
         drift: { kind: "linear", ratePerHour: -0.02 },
-        satiatedBy: [
-          { matches: { kind: "action", type: "tend-affordance" }, amount: 0.15 },
-        ],
+        satiatedBy: [{ matches: { kind: "action", type: "tend-affordance" }, amount: 0.15 }],
       },
       {
         id: "connection",
@@ -83,15 +78,12 @@ const poeConfig: BeingConfig = {
         initialLevel: 0.5,
         target: 0.6,
         drift: { kind: "exponential", halfLifeHours: 72 },
-        satiatedBy: [
-          { matches: { kind: "event", type: "meaningful-exchange" }, amount: 0.25 },
-        ],
+        satiatedBy: [{ matches: { kind: "event", type: "meaningful-exchange" }, amount: 0.25 }],
       },
       {
         id: "understanding",
         name: "Understanding",
-        description:
-          "The desire to comprehend — the place, the guests, oneself.",
+        description: "The desire to comprehend — the place, the guests, oneself.",
         tier: 4,
         weight: 0.5,
         initialLevel: 0.5,
@@ -142,9 +134,19 @@ const poeConfig: BeingConfig = {
     },
   ],
   capabilities: [
-    { id: "workingMemory", name: "Working Memory", description: "Short-term recall.", kind: "memory" },
+    {
+      id: "workingMemory",
+      name: "Working Memory",
+      description: "Short-term recall.",
+      kind: "memory",
+    },
     { id: "guestMemory", name: "Guest Memory", description: "Guest recall.", kind: "memory" },
-    { id: "episodicMemory", name: "Episodic Memory", description: "Long-term recall.", kind: "memory" },
+    {
+      id: "episodicMemory",
+      name: "Episodic Memory",
+      description: "Long-term recall.",
+      kind: "memory",
+    },
   ],
   metadata: { character: "poe", framework: "haunt" },
 };
@@ -177,7 +179,12 @@ for (let hour = 0; hour < 48; hour++) {
 
 console.log("=== Day 2: After 48 hours alone ===\n");
 console.log(describe(poe));
-console.log("\nAvailable capabilities:", availableCapabilities(poe).map((c) => c.name).join(", "));
+console.log(
+  "\nAvailable capabilities:",
+  availableCapabilities(poe)
+    .map((c) => c.name)
+    .join(", "),
+);
 console.log();
 
 // Day 3: A guest arrives. Pressure on guestCare, connection goes up.
@@ -242,7 +249,12 @@ for (let hour = 72; hour < 168; hour++) {
 
 console.log("=== Day 7: After a week of tending ===\n");
 console.log(describe(poe));
-console.log("\nAvailable capabilities:", availableCapabilities(poe).map((c) => c.name).join(", "));
+console.log(
+  "\nAvailable capabilities:",
+  availableCapabilities(poe)
+    .map((c) => c.name)
+    .join(", "),
+);
 console.log();
 
 // Final metabolize
@@ -250,8 +262,15 @@ const final = metabolize(poe);
 console.log("=== Final Felt ===\n");
 console.log(`"${final.felt}"`);
 console.log(`\nOrientation: ${final.orientation}`);
-console.log(`Dominant drives: ${final.dominantDrives.map((d) => `${d.name} (${d.feltPressure.toFixed(2)})`).join(", ")}`);
-console.log(`Active practices: ${final.practiceState.filter((p) => p.active).map((p) => `${p.name} (${p.depth.toFixed(2)})`).join(", ")}`);
+console.log(
+  `Dominant drives: ${final.dominantDrives.map((d) => `${d.name} (${d.feltPressure.toFixed(2)})`).join(", ")}`,
+);
+console.log(
+  `Active practices: ${final.practiceState
+    .filter((p) => p.active)
+    .map((p) => `${p.name} (${p.depth.toFixed(2)})`)
+    .join(", ")}`,
+);
 
 // History summary
 console.log(`\n=== History ===`);

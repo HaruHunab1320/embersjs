@@ -12,29 +12,27 @@
  * `metabolize`, `weightAttention`, and `availableCapabilities` are pure reads.
  */
 
+import { availableCapabilities as availableCapsInner } from "../capabilities/available.js";
+import { pressingDrives } from "../drives/query.js";
+import { satiateDrives } from "../drives/satiate.js";
+import { tickDrives } from "../drives/tick.js";
+import { weightAttention as weightAttentionInner } from "../metabolism/attention.js";
+import { metabolize as metabolizeInner } from "../metabolism/metabolize.js";
+import { strengthenPractices } from "../practices/strengthen.js";
+import { tickPractices } from "../practices/tick.js";
 import type {
+  AttentionCandidate,
   Being,
+  Capability,
+  InnerSituation,
   IntegrationInput,
   IntegrationResult,
-  InnerSituation,
-  AttentionCandidate,
   WeightedCandidate,
-  Capability,
-  Orientation,
 } from "../types.js";
-import { tickDrives } from "../drives/tick.js";
-import { satiateDrives } from "../drives/satiate.js";
-import { pressingDrives } from "../drives/query.js";
-import { tickPractices } from "../practices/tick.js";
-import { strengthenPractices } from "../practices/strengthen.js";
-import { metabolize as metabolizeInner } from "../metabolism/metabolize.js";
-import { weightAttention as weightAttentionInner } from "../metabolism/attention.js";
-import { availableCapabilities as availableCapsInner } from "../capabilities/available.js";
 import {
-  recordTrajectoryPoint,
-  recordPressuredChoice,
-  recordTransition,
   checkAndRecordMilestones,
+  recordPressuredChoice,
+  recordTrajectoryPoint,
 } from "./history.js";
 
 /**

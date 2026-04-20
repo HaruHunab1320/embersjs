@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { createBeing } from "./create.js";
-import { tick, integrate } from "./lifecycle.js";
-import { serializeBeing, deserializeBeing } from "./serialize.js";
+import { describe, expect, it } from "vitest";
 import type { BeingConfig } from "../types.js";
+import { createBeing } from "./create.js";
+import { integrate, tick } from "./lifecycle.js";
+import { deserializeBeing, serializeBeing } from "./serialize.js";
 
 const MS_PER_HOUR = 3_600_000;
 
@@ -45,9 +45,7 @@ function poeConfig(): BeingConfig {
         { id: "gratitudePractice", initialDepth: 0.5 },
       ],
     },
-    subscriptions: [
-      { capabilityId: "workingMemory", when: { kind: "always" } },
-    ],
+    subscriptions: [{ capabilityId: "workingMemory", when: { kind: "always" } }],
     capabilities: [
       { id: "workingMemory", name: "Working Memory", description: "Baseline.", kind: "memory" },
     ],

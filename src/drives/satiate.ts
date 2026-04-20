@@ -3,12 +3,13 @@
  */
 
 import type {
-  DriveStack,
   Drive,
-  IntegrationEvent,
+  DriveStack,
   IntegrationAction,
+  IntegrationEvent,
   SatiationBinding,
 } from "../types.js";
+import { clamp01 } from "../util.js";
 
 /**
  * Applies an event or action to a drive stack, satiating any drives
@@ -72,8 +73,4 @@ function matchesBinding(
   }
 
   return true;
-}
-
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value));
 }

@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { weightAttention } from "./attention.js";
+import { describe, expect, it } from "vitest";
 import { createDriveStack } from "../drives/construct.js";
 import { createPracticeSet } from "../practices/construct.js";
-import type { Being, AttentionCandidate } from "../types.js";
+import type { AttentionCandidate, Being } from "../types.js";
+import { weightAttention } from "./attention.js";
 
 function makeBeing(overrides?: {
   driveLevels?: Record<string, { tier: number; level: number; target: number }>;

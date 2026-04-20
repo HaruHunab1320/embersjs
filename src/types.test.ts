@@ -6,26 +6,26 @@
  * doesn't compile, and straightforward assignments to assert good code does.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import type {
-  Drive,
-  DriveStack,
-  DriftFunction,
-  DominationRules,
-  Practice,
-  PracticeSet,
-  PracticeEffect,
-  Capability,
-  Subscription,
   AccessCondition,
   Being,
-  History,
-  Orientation,
-  InnerSituation,
-  IntegrationEvent,
-  IntegrationAction,
-  IntegrationInput,
   BeingConfig,
+  Capability,
+  DominationRules,
+  DriftFunction,
+  Drive,
+  DriveStack,
+  History,
+  InnerSituation,
+  IntegrationAction,
+  IntegrationEvent,
+  IntegrationInput,
+  Orientation,
+  Practice,
+  PracticeEffect,
+  PracticeSet,
+  Subscription,
 } from "./types.js";
 
 // Helper: asserts a value is assignable to a type at compile time.
@@ -123,9 +123,7 @@ describe("Practice types", () => {
           requiresPressure: false,
         },
       ],
-      effects: [
-        { kind: "dampen-drive-pressure", driveIds: [], factor: 0.3 },
-      ],
+      effects: [{ kind: "dampen-drive-pressure", driveIds: [], factor: 0.3 }],
     };
     assertType<Practice>(practice);
     expect(practice.depth).toBe(0.3);
@@ -145,9 +143,7 @@ describe("Practice types", () => {
           requiresPressure: true,
         },
       ],
-      effects: [
-        { kind: "shift-orientation", toward: "held" },
-      ],
+      effects: [{ kind: "shift-orientation", toward: "held" }],
     };
     assertType<Practice>(practice);
     expect(practice.strengthens[0]!.requiresPressure).toBe(true);
@@ -167,9 +163,7 @@ describe("Practice types", () => {
           requiresPressure: false,
         },
       ],
-      effects: [
-        { kind: "enable-witness", meta: true },
-      ],
+      effects: [{ kind: "enable-witness", meta: true }],
     };
     assertType<Practice>(practice);
     expect(practice.effects[0]).toEqual({ kind: "enable-witness", meta: true });

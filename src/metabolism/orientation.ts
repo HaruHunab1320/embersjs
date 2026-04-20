@@ -8,10 +8,10 @@
  * - consumed: drives pressing, practices absent — overwhelmed
  */
 
-import type { Orientation, PracticeSet } from "../types.js";
-import { averagePracticeDepth, activePractices } from "../practices/query.js";
-import type { FeltDrivePressure } from "./pressure.js";
 import type { ComposedEffects } from "../practices/effects.js";
+import { activePractices, averagePracticeDepth } from "../practices/query.js";
+import type { Orientation, PracticeSet } from "../types.js";
+import type { FeltDrivePressure } from "./pressure.js";
 
 /**
  * Determines the being's overall orientation from pressure and practice state.
@@ -30,7 +30,7 @@ import type { ComposedEffects } from "../practices/effects.js";
 export function determineOrientation(
   pressures: FeltDrivePressure[],
   practices: PracticeSet,
-  effects: ComposedEffects,
+  _effects: ComposedEffects,
 ): Orientation {
   const totalPressure = pressures.reduce((sum, p) => sum + p.feltPressure, 0);
   const avgDepth = averagePracticeDepth(practices);
@@ -38,9 +38,7 @@ export function determineOrientation(
 
   // Low pressure: the being's needs are largely met
   if (totalPressure < 0.15) {
-    // Even with low pressure, a being with deep practice is "clear"
-    // while one without is somewhat hollow — but not strained
-    return avgDepth > 0.3 ? "clear" : "clear";
+    return "clear";
   }
 
   // Moderate pressure

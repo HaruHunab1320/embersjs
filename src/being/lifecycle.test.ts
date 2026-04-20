@@ -1,7 +1,13 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+import type { BeingConfig } from "../types.js";
 import { createBeing } from "./create.js";
-import { tick, integrate, metabolize, weightAttention, availableCapabilities } from "./lifecycle.js";
-import type { BeingConfig, IntegrationInput, Being } from "../types.js";
+import {
+  availableCapabilities,
+  integrate,
+  metabolize,
+  tick,
+  weightAttention,
+} from "./lifecycle.js";
 
 const MS_PER_HOUR = 3_600_000;
 
@@ -48,9 +54,7 @@ function poeConfig(): BeingConfig {
           initialLevel: 0.5,
           target: 0.6,
           drift: { kind: "linear", ratePerHour: -0.03 },
-          satiatedBy: [
-            { matches: { kind: "event", type: "meaningful-exchange" }, amount: 0.25 },
-          ],
+          satiatedBy: [{ matches: { kind: "event", type: "meaningful-exchange" }, amount: 0.25 }],
         },
       ],
     },
@@ -142,7 +146,7 @@ describe("lifecycle", () => {
 
       const before = being.practices.practices.get("integrityPractice")!.depth;
 
-      const result = integrate(being, {
+      integrate(being, {
         entry: { kind: "action", type: "honest-admission" },
         context: { pressured: true },
       });

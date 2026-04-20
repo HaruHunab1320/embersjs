@@ -1,12 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+import { createPracticeSet } from "./construct.js";
 import {
-  practiceDepth,
-  hasPracticeAtDepth,
-  practicesByDepth,
   activePractices,
   averagePracticeDepth,
+  hasPracticeAtDepth,
+  practiceDepth,
+  practicesByDepth,
 } from "./query.js";
-import { createPracticeSet } from "./construct.js";
 
 function makeSet() {
   return createPracticeSet({

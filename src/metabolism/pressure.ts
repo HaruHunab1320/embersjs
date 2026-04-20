@@ -3,9 +3,9 @@
  * after applying tier-domination and practice effects.
  */
 
-import type { Drive, DriveStack } from "../types.js";
-import { drivePressure, weightedPressure, dominantTier } from "../drives/query.js";
+import { dominantTier, drivePressure, weightedPressure } from "../drives/query.js";
 import type { ComposedEffects } from "../practices/effects.js";
+import type { Drive, DriveStack } from "../types.js";
 
 /**
  * A drive's pressure after all modulations have been applied.

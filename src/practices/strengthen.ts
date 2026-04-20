@@ -8,14 +8,15 @@
  */
 
 import type {
+  BeingState,
+  DriveStack,
+  IntegrationAction,
+  IntegrationEvent,
   Practice,
   PracticeSet,
   PracticeStrengthener,
-  DriveStack,
-  IntegrationEvent,
-  IntegrationAction,
-  BeingState,
 } from "../types.js";
+import { clamp01 } from "../util.js";
 
 /**
  * Determines whether the being is currently "under pressure" —
@@ -107,8 +108,4 @@ function matchesStrengthener(
       return matcher.predicate(beingState);
     }
   }
-}
-
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value));
 }

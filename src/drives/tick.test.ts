@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
-import { tickDrives } from "./tick.js";
-import { createDriveStack } from "./construct.js";
+import { describe, expect, it } from "vitest";
 import type { DriveStackConfig } from "../types.js";
+import { createDriveStack } from "./construct.js";
+import { tickDrives } from "./tick.js";
 
 const MS_PER_HOUR = 3_600_000;
 
@@ -91,7 +91,7 @@ describe("tickDrives", () => {
     // But we're doing 24 discrete 1-hour ticks, not one 24-hour step.
     // Each hour: level *= 0.5^(1/48)
     // After 24 ticks: 0.6 * (0.5^(1/48))^24 = 0.6 * 0.5^(24/48) ≈ 0.4243
-    expect(stack.drives.get("connection")!.level).toBeCloseTo(0.6 * Math.pow(0.5, 24 / 48), 5);
+    expect(stack.drives.get("connection")!.level).toBeCloseTo(0.6 * 0.5 ** (24 / 48), 5);
 
     // understanding: 0.5 + (-0.01 * 24) = 0.26
     expect(stack.drives.get("understanding")!.level).toBeCloseTo(0.26, 5);

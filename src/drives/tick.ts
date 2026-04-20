@@ -4,7 +4,7 @@
  * Pure function: same input produces same output, no side effects.
  */
 
-import type { DriveStack, Drive } from "../types.js";
+import type { Drive, DriveStack } from "../types.js";
 import { applyDrift } from "./drift.js";
 
 /**

@@ -5,9 +5,9 @@
  * Recursively handles `any` and `all` composites.
  */
 
-import type { AccessCondition, Being } from "../types.js";
 import { isTierSatisfied } from "../drives/query.js";
 import { hasPracticeAtDepth } from "../practices/query.js";
+import type { AccessCondition, Being } from "../types.js";
 
 /**
  * Evaluates an AccessCondition against a Being's current state.
