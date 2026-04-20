@@ -7,16 +7,16 @@
  * Run with: npx tsx examples/librarian.ts
  */
 
+import type { BeingConfig } from "../src/index.js";
 import {
+  availableCapabilities,
   createBeing,
-  tick,
+  describe,
   integrate,
   metabolize,
+  tick,
   weightAttention,
-  availableCapabilities,
-  describe,
 } from "../src/index.js";
-import type { BeingConfig } from "../src/index.js";
 
 const config: BeingConfig = {
   id: "librarian",
@@ -92,7 +92,8 @@ const config: BeingConfig = {
           { kind: "practice-depth", practiceId: "witnessPractice", threshold: 0.4 },
         ],
       },
-      because: "Deep archives require either secure foundations or the awareness to handle what's found.",
+      because:
+        "Deep archives require either secure foundations or the awareness to handle what's found.",
     },
     {
       capabilityId: "crossReference",
@@ -103,13 +104,24 @@ const config: BeingConfig = {
           { kind: "practice-depth", practiceId: "presencePractice", threshold: 0.3 },
         ],
       },
-      because: "Cross-referencing requires both the drive to understand and the presence to hold complexity.",
+      because:
+        "Cross-referencing requires both the drive to understand and the presence to hold complexity.",
     },
   ],
   capabilities: [
     { id: "catalog", name: "Catalog", description: "The main collection index.", kind: "memory" },
-    { id: "deepArchive", name: "Deep Archive", description: "Rare and fragile materials.", kind: "memory" },
-    { id: "crossReference", name: "Cross-Reference", description: "Pattern matching across texts.", kind: "compute" },
+    {
+      id: "deepArchive",
+      name: "Deep Archive",
+      description: "Rare and fragile materials.",
+      kind: "memory",
+    },
+    {
+      id: "crossReference",
+      name: "Cross-Reference",
+      description: "Pattern matching across texts.",
+      kind: "compute",
+    },
   ],
 };
 
@@ -118,7 +130,12 @@ const librarian = createBeing(config);
 
 console.log("=== The Librarian: Morning ===\n");
 console.log(describe(librarian));
-console.log("\nCapabilities:", availableCapabilities(librarian).map((c) => c.name).join(", "));
+console.log(
+  "\nCapabilities:",
+  availableCapabilities(librarian)
+    .map((c) => c.name)
+    .join(", "),
+);
 
 // A quiet morning of cataloging
 for (let hour = 0; hour < 4; hour++) {
@@ -169,7 +186,12 @@ for (let hour = 0; hour < 12; hour++) {
 
 console.log("\n=== Evening ===\n");
 console.log(describe(librarian));
-console.log("\nCapabilities:", availableCapabilities(librarian).map((c) => c.name).join(", "));
+console.log(
+  "\nCapabilities:",
+  availableCapabilities(librarian)
+    .map((c) => c.name)
+    .join(", "),
+);
 
 const evening = metabolize(librarian);
 console.log(`\nFelt: "${evening.felt}"`);

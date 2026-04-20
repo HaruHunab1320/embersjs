@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.1.0-alpha.0] — Unreleased
+## [0.1.0]
 
 ### Added
 - **Core types** — Drive, Practice, Capability, Subscription, Being, and all supporting types with full TSDoc

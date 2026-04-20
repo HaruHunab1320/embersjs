@@ -7,7 +7,7 @@
  * Run with: npx tsx examples/minimum.ts
  */
 
-import { createBeing, tick, metabolize, describe } from "../src/index.js";
+import { createBeing, describe, metabolize, tick } from "../src/index.js";
 
 const being = createBeing({
   id: "minimal",
@@ -24,9 +24,7 @@ const being = createBeing({
         initialLevel: 0.7,
         target: 0.8,
         drift: { kind: "linear", ratePerHour: -0.05 },
-        satiatedBy: [
-          { matches: { kind: "action", type: "help" }, amount: 0.2 },
-        ],
+        satiatedBy: [{ matches: { kind: "action", type: "help" }, amount: 0.2 }],
       },
     ],
   },

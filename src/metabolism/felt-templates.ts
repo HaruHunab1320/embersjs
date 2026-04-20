@@ -239,7 +239,9 @@ function composeHeld(
     const holder = holdingPractices[0]!;
     if (effects.witnessEnabled) {
       // Witness-enabled pivot: self-aware meeting
-      parts.push(`I notice I am meeting this rather than being swallowed by it. ${dn(holder.name, "start")} holds.`);
+      parts.push(
+        `I notice I am meeting this rather than being swallowed by it. ${dn(holder.name, "start")} holds.`,
+      );
     } else {
       // Practice-anchored pivot
       const pivots = [

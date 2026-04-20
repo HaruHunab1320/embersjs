@@ -2,7 +2,7 @@
 
 > A TypeScript library for giving AI beings genuine inner architecture — needs, capacities, and practices that shape how a being meets its experience. Not goals. Not instructions. **Motivation with structure, and the capacity to grow through meeting what's hard.**
 
-**Status:** v0.1 — feature-complete, pre-release
+**Status:** v0.1.0
 **Package:** `@embersjs/core`
 **License:** MIT
 **Runtime:** Node 20+, TypeScript-first, framework-agnostic.

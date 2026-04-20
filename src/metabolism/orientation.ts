@@ -34,8 +34,7 @@ export function determineOrientation(
 ): Orientation {
   if (pressures.length === 0) return "clear";
 
-  const avgPressure =
-    pressures.reduce((sum, p) => sum + p.feltPressure, 0) / pressures.length;
+  const avgPressure = pressures.reduce((sum, p) => sum + p.feltPressure, 0) / pressures.length;
   const avgDepth = averagePracticeDepth(practices);
   const activeCount = activePractices(practices).length;
 
