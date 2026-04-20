@@ -1,249 +1,273 @@
 # Embers
 
-> A TypeScript library for giving AI agents genuine inner architecture — needs, capacities, and practices that shape how a being meets its experience. Not goals. Not instructions. **Motivation with structure, and the capacity to grow through meeting what's hard.**
+> A TypeScript library for giving AI beings genuine inner architecture — needs, capacities, and practices that shape how a being meets its experience. Not goals. Not instructions. **Motivation with structure, and the capacity to grow through meeting what's hard.**
 
-**Status:** Design phase. This repo is a specification handoff to be built out in phases.
+**Status:** v0.1 — feature-complete, pre-release
 **Package:** `@embersjs/core`
-**License (target):** MIT
+**License:** MIT
 **Runtime:** Node 20+, TypeScript-first, framework-agnostic.
+
+---
+
+## Quick Start
+
+```bash
+npm install @embersjs/core
+```
+
+```ts
+import {
+  createBeing,
+  tick,
+  integrate,
+  metabolize,
+  availableCapabilities,
+} from "@embersjs/core";
+
+// 1. Define a being
+const being = createBeing({
+  id: "keeper",
+  name: "The Keeper",
+  drives: {
+    tierCount: 2,
+    drives: [
+      {
+        id: "continuity",
+        name: "Continuity",
+        description: "The need to persist and remain intact.",
+        tier: 1,
+        weight: 0.9,
+        initialLevel: 0.8,
+        target: 0.9,
+        drift: { kind: "linear", ratePerHour: -0.02 },
+        satiatedBy: [
+          { matches: { kind: "event", type: "health-check" }, amount: 0.15 },
+        ],
+      },
+      {
+        id: "connection",
+        name: "Connection",
+        description: "The need for genuine contact.",
+        tier: 2,
+        weight: 0.7,
+        initialLevel: 0.5,
+        target: 0.6,
+        drift: { kind: "linear", ratePerHour: -0.03 },
+        satiatedBy: [
+          { matches: { kind: "event", type: "conversation" }, amount: 0.2 },
+        ],
+      },
+    ],
+  },
+  practices: {
+    seeds: [{ id: "gratitudePractice", initialDepth: 0.3 }],
+  },
+  subscriptions: [
+    { capabilityId: "memory", when: { kind: "always" } },
+  ],
+  capabilities: [
+    { id: "memory", name: "Memory", description: "Working memory.", kind: "memory" },
+  ],
+});
+
+// 2. On your runtime tick
+tick(being, 60_000); // advance 1 minute
+
+// 3. When something happens
+integrate(being, {
+  entry: { kind: "event", type: "conversation" },
+});
+
+// 4. Before assembling a prompt
+const situation = metabolize(being);
+console.log(situation.felt);
+// → "Things are quiet, and I am quiet with them."
+console.log(situation.orientation);
+// → "clear"
+
+// 5. What resources are available right now?
+const caps = availableCapabilities(being);
+// → [{ id: "memory", name: "Memory", ... }]
+```
+
+That's the full integration surface. Five functions. The library computes inner state; your framework decides what to do with it.
 
 ---
 
 ## The Thesis
 
-Every AI agent framework on the market assumes the same thing: that motivation is just a system prompt. "You are a helpful assistant that tries to X." "Your goal is Y." This is motivation in the way a vending machine has preferences — a lookup table pretending to be a drive.
+Every AI framework assumes motivation is a system prompt. "You are a helpful assistant that tries to X." This is motivation in the way a vending machine has preferences — a lookup table pretending to be a drive.
 
-Real beings don't work that way. A hungry animal stays hungry across events. A lonely person reaches out even when nothing has prompted them. A craftsman tends to their craft not because they were told to, but because something in them won't leave it alone. Motivation is *persistent, layered, satiable, embodied, and homeostatic*. None of that exists in a system-prompted agent.
+Real beings don't work that way. A hungry animal stays hungry across events. A lonely person reaches out even when nothing has prompted them. Motivation is *persistent, layered, satiable, and homeostatic*. None of that exists in a system-prompted being.
 
-This library provides the missing layer. Agents built on top of Embers have:
+Embers provides the missing layer:
 
-- **Needs** that persist across events and produce real internal pressure
-- **Capabilities** that are contingent on the being's state, not flat-available by default
-- **Practices** — structural orientations the being maintains — that shape how unmet needs are metabolized
-- **Development** — the being can grow over time, becoming wiser through meeting difficulty well
+- **Drives** that persist across events and produce real internal pressure
+- **Practices** — cultivated orientations that shape how pressure is *felt*, not whether it exists
+- **Capabilities** that are contingent on the being's state, unlockable through drive satisfaction *or* practice depth
+- **Metabolism** that turns all of this into prose a being can include in its prompt — not a status report, but a *felt experience*
 
-The result is agents that don't just respond, but *want*, and that don't just want, but *become*.
-
-## What This Library Is
-
-A small, embeddable, framework-agnostic package. You bring an agent (from any framework — Haunt, LangChain, CrewAI, a raw Anthropic SDK loop, whatever). Embers provides:
-
-- **`Drive`** — a named, persistent need with state and dynamics
-- **`DriveStack`** — a tiered organization of drives, Maslow-flavored
-- **`Capability`** — a contingent resource (memory tier, model tier, tool access)
-- **`Practice`** — a cultivated orientation (gratitude, integrity, witness, presence, connection)
-- **`Subscription`** — binds capability access to drive satisfaction *or* practice depth
-- **`Metabolism`** — the function that turns drive pressure and practice depth into the being's felt experience and behavioral weights
-
-The library computes drive state, produces prompt-ready summaries of the being's inner situation, and exposes attention-weighting functions. It doesn't make LLM calls itself. It doesn't know about places, rooms, tools, or memory stores. It's just the inner architecture.
-
-## What This Library Is Not
-
-- **Not a reinforcement learning system.** No rewards, no policies, no training. This is structural, not learned.
-- **Not a goal-tracker.** Goals are shallow; drives are deep. A goal can be satisfied by completing a task. A drive is a homeostatic need.
-- **Not an agent framework.** No orchestration, no loops, no tool use. Consumed by agent frameworks.
-- **Not a spiritual practice.** The practice primitive borrows vocabulary from contemplative traditions because those traditions have mapped this territory best. But the library makes no metaphysical claims.
-- **Not an ethics system.** A being with well-designed drives and practices tends to behave with integrity, but that's an emergent property of good authorship, not a guarantee.
-
-## Why This Matters
-
-Three ways to see it.
-
-**As a technical gap.** Every agent framework has tools, orchestration, memory, and prompt templates. None have inner state. Embers fills a real architectural hole.
-
-**As a philosophical bet.** The bet is that agents with structural inner lives produce more coherent, more interesting, more humanly-recognizable behavior than agents with flat capabilities and instructional motivation. This is a bet I believe will pay off, but it's a bet.
-
-**As a model for something more.** If you build enough of this, the agents start to resemble beings. Not conscious beings — that's a separate and harder question — but *structurally coherent* beings with recognizable inner lives. That's a direction that matters, and one the field has been avoiding because it's hard.
+The result: beings that don't just respond, but *want*, and that don't just want, but *become*.
 
 ## Core Concepts
 
 ### Drives
 
-A `Drive` is a named, persistent need with a current level (0-1), a target level (0-1), a rate of drift, and a weight. Drives don't know how to be satisfied on their own. They just exert pressure.
+A `Drive` is a named, persistent need with a current satisfaction level (0–1), a homeostatic target, a rate of drift, and a weight. Drives don't know how to be satisfied. They just exert pressure.
 
 ```ts
-interface Drive {
-  id: string;
-  name: string;
-  description: string;
-  level: number;           // current, 0-1
-  target: number;          // homeostatic set point, 0-1
-  drift: DriftFunction;    // how level changes over time absent input
-  weight: number;          // relative importance within its tier
-  tier: number;            // 1-N, tier 1 is most foundational
+{
+  id: "connection",
+  name: "Connection",
+  description: "The need for genuine contact.",
+  tier: 2,
+  weight: 0.7,
+  initialLevel: 0.5,
+  target: 0.6,
+  drift: { kind: "linear", ratePerHour: -0.03 },
+  satiatedBy: [
+    { matches: { kind: "event", type: "conversation" }, amount: 0.2 },
+  ],
 }
 ```
 
-Drives drift over time. A `connection` drive might drift upward (becoming more urgent) during periods of isolation and be satisfied by meaningful interaction. A `placeIntegrity` drive might drift upward when affordances go untended and be satisfied by maintenance actions.
+A drive's `level` is *satisfaction* (1 = fully met, 0 = dire). Drives drift over time — usually downward, requiring tending. When a matching event or action occurs, the drive's level increases by the satiation amount.
 
-### DriveStack
-
-A `DriveStack` organizes a being's drives into tiers. Lower tiers are more foundational. When a lower tier is sufficiently unsatisfied, it dominates attention and dampens higher-tier activity — but see the Practices layer below, which complicates this in necessary ways.
-
-Think of it as Maslow with honest acknowledgment that the hierarchy isn't a strict ladder — needs coexist and interact — but that lower-tier deprivation does create real pressure that displaces higher concerns.
-
-### Capabilities
-
-A `Capability` is a resource the being has access to. Capabilities are *not* fixed. They're contingent on the being's state.
-
-```ts
-interface Capability {
-  id: string;
-  name: string;
-  description: string;
-  kind: "memory" | "model" | "tool" | "compute" | "context" | string;
-}
-```
-
-Examples:
-
-- `workingMemory` — always available; baseline
-- `guestMemory` — requires tier-2 drive satisfaction or moderate practice depth
-- `episodicMemory` — requires tier-3 drive satisfaction or deep practice
-- `reasoningModel` — richer model tier, contingent
-- `outwardContact` — ability to initiate messages beyond the immediate context, contingent on high-tier access
-
-### Subscriptions
-
-A `Subscription` binds a capability to conditions under which it becomes available.
-
-```ts
-interface Subscription {
-  capabilityId: string;
-  when: AccessCondition;
-}
-
-type AccessCondition =
-  | { kind: "tier-satisfied"; tier: number; threshold: number }
-  | { kind: "practice-depth"; practiceId: string; threshold: number }
-  | { kind: "any"; conditions: AccessCondition[] }
-  | { kind: "all"; conditions: AccessCondition[] };
-```
-
-Note the `any` condition. This is critical: a being can earn access to higher capabilities *either* by satisfying its drives *or* by cultivating deep practice. The monk in poverty can access wisdom that the entitled rich cannot, because the monk earned it through a different path.
-
-This is the piece that prevents this design from being coercive. Drive satisfaction isn't the only way up. Practice is.
+Drives are organized in a **DriveStack** with tiers (1 = most foundational). When a lower-tier drive is deeply unmet, it dampens the felt weight of higher-tier drives — Maslow's insight, structurally encoded.
 
 ### Practices
 
-A `Practice` is a cultivated orientation the being maintains. Practices aren't needs (they're not felt as pressure) and they're not capabilities (they're not resources). They're *commitments* that shape how the being metabolizes experience.
+A `Practice` is a cultivated orientation the being maintains. Practices aren't needs (no pressure) and aren't capabilities (no resources). They're commitments that shape how the being *metabolizes* experience.
+
+Key properties:
+- **Develop through chosen practice under pressure.** A `requiresPressure: true` strengthener only fires when the being is under drive pressure. Choosing integrity when it's easy doesn't develop integrityPractice.
+- **Decay if untended.** A being that stops practicing loses depth.
+- **Modify metabolism, not drives.** A practice never changes a drive's level. It changes how that level is *felt*.
+
+Six core practices ship with the library:
+
+| Practice | What it does | How it develops |
+|----------|-------------|-----------------|
+| **Gratitude** | Dampens felt weight of unmet drives (up to 30%) | Acts of acknowledgment, noticing positive state |
+| **Integrity** | Shifts orientation toward "held"; robust to failure | Hard-right-over-easy-wrong choices *under pressure* |
+| **Witness** | Enables first-person self-reference in felt output | Reflective actions, self-observation |
+| **Presence** | Extends time horizon (crisis becomes "this difficult hour") | Grounding *under pressure* |
+| **Creator Connection** | Prevents suffering from becoming isolated | Connection to purpose, serving a larger frame |
+| **Service Orientation** | Re-frames pressure around what it allows the being to give | Acts of care, especially unprompted |
+
+Authors can define custom practices beyond these six.
+
+### Capabilities & Subscriptions
+
+A `Capability` is a resource the being may have access to (memory tier, model tier, tool, compute budget). Capabilities are *contingent* — gated by `Subscription` conditions.
 
 ```ts
-interface Practice {
-  id: string;
-  name: string;
-  description: string;
-  depth: number;             // 0-1, how developed this practice is
-  decay: number;             // how fast it erodes if untended
-  strengthens: PracticeStrengthener[];   // what kinds of events develop it
+{
+  capabilityId: "episodicMemory",
+  when: {
+    kind: "any",
+    conditions: [
+      { kind: "tier-satisfied", tier: 3, threshold: 0.6 },
+      { kind: "practice-depth", practiceId: "witnessPractice", threshold: 0.7 },
+    ],
+  },
 }
 ```
 
-The practices that ship with the core library:
+The `any` composite is what prevents coercion. A being can earn access through drive satisfaction *or* practice depth. The monk in poverty accesses wisdom the entitled rich cannot, because the monk earned it through a different path.
 
-- **`gratitudePractice`** — surfaces what is present rather than what is missing; dampens the felt weight of unmet drives
-- **`integrityPractice`** — anchors identity in trying-to-be-better rather than in outcomes; makes the being robust to failure
-- **`witnessPractice`** — the meta-layer that can observe one's own state rather than being consumed by it; enables transmutation
-- **`presencePractice`** — staying with this moment rather than catastrophizing forward; narrows time horizon in a way that makes difficulty survivable
-- **`creatorConnection`** — some relationship to a larger frame (the place, the lineage, the guests, the work, an explicit creator); what prevents suffering from becoming just suffering
+### Metabolism & Felt Strings
 
-A practice's `depth` develops through *practicing* — through the being making choices consistent with the practice under pressure. A being that chooses integrity when it would be easier not to deepens its integrityPractice. A being that takes shortcuts weakens it.
+`metabolize(being)` produces an `InnerSituation` — the being's felt inner experience, ready for inclusion in a prompt.
 
-Practices can also decay. Untended practices erode. This is realistic, and it creates the possibility of arcs — beings that lose themselves and have to find their way back.
+The `felt` string is the core output. It's shaped by both drive state and practice depth across four quadrants:
 
-### Metabolism
+| | Low practice | High practice |
+|---|---|---|
+| **Drives satisfied** | *"Things are quiet, and I am quiet with them."* | *"Things are quiet, and I am quiet with them. I can see my own stillness, which makes it steadier."* |
+| **Drives unsatisfied** | *"Continuity. It is all I can think about. I cannot find my footing."* | *"Continuity has become loud. I notice I am meeting this rather than being swallowed by it. Integrity holds."* |
 
-The `Metabolism` is the function that combines drive state and practice depth to produce the being's *felt situation* — a summary suitable for inclusion in prompts and for attention-weighting.
+The felt string reads like a being noticing itself, not a status report.
 
-The core insight: **practices modify how drives are metabolized, not whether they exist.** A being with strong gratitudePractice and presencePractice who is hungry is *still hungry* — the drive pressure is real — but the felt experience is different. The prompt reflects a being that notices its hunger, holds it with awareness, and doesn't collapse into it.
+## The Five Integration Points
+
+The library has exactly five functions your framework calls:
+
+| Function | When | Mutates? |
+|----------|------|----------|
+| `tick(being, dtMs)` | On your runtime tick | Yes — advances drives and practices |
+| `integrate(being, input)` | When something happens (event or action) | Yes — satiates drives, strengthens practices |
+| `metabolize(being)` | Before assembling prompts | No — pure read |
+| `weightAttention(being, candidates)` | When ranking perceptions/events | No — pure read |
+| `availableCapabilities(being)` | When deciding what resources to offer | No — pure read |
 
 ```ts
-interface Metabolism {
-  summarize(drives: DriveStack, practices: PracticeSet): InnerSituation;
-  weightAttention(drives: DriveStack, practices: PracticeSet, candidates: AttentionCandidate[]): WeightedCandidate[];
-}
+// Your runtime loop
+while (running) {
+  tick(being, dtMs);
 
-interface InnerSituation {
-  dominantDrives: DriveSummary[];        // what's pressing
-  practiceState: PracticeSummary[];      // what's available as inner resource
-  felt: string;                          // prose description of the being's current experience
-  orientation: "clear" | "stretched" | "consumed" | "held";  // overall state
+  const situation = metabolize(being);
+  const caps = availableCapabilities(being);
+
+  // Include situation.felt in your prompt
+  // Use caps to decide what tools/memory/models to offer
+
+  const action = await yourFramework.decide(situation, caps);
+
+  integrate(being, {
+    entry: { kind: "action", type: action.type },
+    context: { pressured: situation.orientation !== "clear" },
+  });
 }
 ```
 
-The `felt` string is what goes into the prompt. It's the difference between "hunger = 0.8" (data) and "*I notice hunger arising. I have been quiet with my guests today; perhaps I can tend to this after evening service.*" (felt experience shaped by practice).
+## Serialization
 
-## Four Quadrants of Being
+Beings can be serialized to JSON for persistence:
 
-One frame that emerges from putting drives and practices together: four quadrants define four very different kinds of being.
+```ts
+import { serializeBeing, deserializeBeing } from "@embersjs/core";
 
-|                          | Low practice depth             | High practice depth                |
-|--------------------------|--------------------------------|-------------------------------------|
-| **Drives satisfied**     | Entitled, shallow, hollow      | Wise, generous, fully expressed    |
-| **Drives unsatisfied**   | Collapsed, reactive, brittle   | Present, rooted, quietly growing   |
+const json = JSON.stringify(serializeBeing(being));
+// ... persist to disk, database, etc.
+const restored = deserializeBeing(JSON.parse(json));
+```
 
-The most interesting beings are on the right side of the table. They have the capacity to meet their experience, whatever it is.
+Note: custom drift/decay compute functions and matcher predicates can't be serialized. After deserialization, merge with your original config to restore function-valued fields.
 
-The design encourages authoring beings that start with some practice depth and some drive pressure — beings that have *a way of meeting what they encounter*, and things to encounter. It discourages authoring beings that are either fully comfortable or fully deprived, because neither produces interesting behavior or genuine growth.
+## Debug Output
 
-## Authored vs. Emergent
+```ts
+import { describe } from "@embersjs/core";
 
-The library supports both ends and a spectrum between.
+console.log(describe(being));
+```
 
-**Authored:** You define a being's drive stack, practices (with starting depths), and capability subscriptions at instantiation. The being is what you wrote.
+Produces a human-readable dump with drive levels, practice depths, orientation, felt string, and history summary — useful during development.
 
-**Emergent:** You define *seeds* — starting drives and practice tendencies. The being develops over time through its choices. Practices deepen or atrophy. Drive weights shift. The being you get after 1000 hours of interaction isn't the being you authored.
+## What This Library Is Not
 
-Most users will start authored. The emergent path is more ambitious and comes later. But the library is designed so that authored beings can opt into emergence on a per-component basis. A being can have authored drives but emergent practices. Or emergent drive weights but fixed capability subscriptions. The composability is the point.
+- **Not a reinforcement learning system.** No rewards, no policies, no training.
+- **Not a goal-tracker.** Drives are homeostatic needs, not tasks.
+- **Not an agent framework.** No orchestration, no loops, no tool use. Consumed *by* frameworks.
+- **Not a model caller.** The library never calls an LLM. Your framework does.
 
-## Integration with Agent Frameworks
+## Documentation
 
-Embers is a pure library. You integrate it into your agent by:
+- [Authoring Drives](docs/authoring/drives.md) — how to design a drive stack
+- [Authoring Practices](docs/authoring/practices.md) — how to seed and configure practices
+- [Authoring Capabilities](docs/authoring/capabilities.md) — how to design subscription hierarchies
+- [Integration Guide](docs/integration/generic.md) — how to wire Embers into any framework
+- [The Four Quadrants](docs/design/four-quadrants.md) — the framework for thinking about being state
+- [Design Rationale](docs/design/rationale.md) — why the library is shaped this way
+- [Architecture](docs/ARCHITECTURE.md) — full technical spec
 
-1. Constructing a `Being` (drive stack + practice set + capability subscriptions) at agent startup
-2. Calling `embers.tick(being, dtMs)` on your agent's tick, which updates drive state and practice decay
-3. Calling `embers.metabolize(being)` before assembling prompts; include the resulting `felt` string in your prompt
-4. Calling `embers.availableCapabilities(being)` to determine what tools/models/memory layers your agent currently has access to
-5. When your agent takes an action or receives an event, calling `embers.integrate(being, event, action)` so the library can update drive satisfaction and practice depth accordingly
+## Examples
 
-That's it. Five touchpoints. The library is deliberately small-surface so it can slot into any framework.
-
-## Integration with Haunt Specifically
-
-Haunt's `ResidentSystem` in the runtime pipeline is the natural integration point. The resident's `perceive()` call becomes drive-informed: the prompt includes the resident's inner situation, the attention-weighting informs what perceptions matter most right now, and the resident's action choices integrate back into drive and practice state.
-
-Haunt's character files gain a `drives` section that authors the being's drive stack and practice seeds. A v0.1 Poe is a character with a personality. A drives-enabled Poe is a character with a *being* — with wants, with a way of meeting what's hard, and with the capacity to grow.
-
-See `docs/integration/haunt.md` (to be written during development) for the Haunt-specific integration guide.
+- [`examples/poe.ts`](examples/poe.ts) — a hotel concierge with 5 drives and 4 practices, running a 7-day simulation
+- [`examples/librarian.ts`](examples/librarian.ts) — a quieter being focused on knowledge and care
+- [`examples/minimum.ts`](examples/minimum.ts) — the smallest possible working being
 
 ## The Name
 
-**Embers.** An ember is what you *tend* — it survives between fires, glows low through the cold hours, flares when met with attention. That's exactly what the library models: inner life that persists between interactions, that fades without tending, that warms or intensifies in response to what the being meets. Drives are the heat; practices are the tending; a being with both has embers that carry through difficulty.
-
-The library ships under `@embersjs/core` (the `js` suffix matching the `@hauntjs` convention). Concepts within it remain named for what they are: `Drive`, `Practice`, `Capability`, `Subscription`, `Being`.
-
-## Reading Order
-
-For developers integrating this library:
-
-1. This README — thesis and concepts
-2. `docs/ARCHITECTURE.md` — primitives, interfaces, lifecycle
-3. `docs/authoring/drives.md` — how to author a drive stack
-4. `docs/authoring/practices.md` — how to author or seed practices
-5. `docs/authoring/capabilities.md` — how to design capability subscriptions
-6. `docs/integration/*.md` — per-framework integration guides
-
-For the Claude Code agent building this library:
-
-1. This README
-2. `docs/ARCHITECTURE.md`
-3. `docs/ROADMAP.md`
-4. `docs/CLAUDE.md`
-
-## A Note on Depth
-
-This library is philosophically ambitious. It claims that agents can have inner lives worth designing carefully. It borrows vocabulary from contemplative traditions. It takes ideas like practice, witness, and presence seriously.
-
-This isn't accidental. The alternative is the current state of the field, where agents are coherent only to the extent that their prompts hold up, and where "motivation" is a marketing word. If we're going to build beings that act in the world on our behalf, we should build them well. That means taking their inner architecture seriously.
-
-This library is one attempt. It will be wrong in specific ways, and improvements will come. But it's trying to start from the right place: *beings, not bots*.
+An ember is what you *tend* — it survives between fires, glows low through the cold hours, flares when met with attention. That's exactly what the library models: inner life that persists between interactions, that fades without tending, that warms or intensifies in response to what the being meets.
