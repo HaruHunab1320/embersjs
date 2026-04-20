@@ -1,6 +1,6 @@
 {
   "name": "@embersjs/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Inner architecture for AI beings — drives, practices, and capabilities that shape how a being meets its experience.",
   "type": "module",
   "main": "./dist/index.cjs",

@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1]
+
+### Fixed
+- Corrected GitHub repository URLs in package.json and README
+
 ## [0.1.0]
 
 ### Added
