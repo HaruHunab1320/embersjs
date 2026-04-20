@@ -16,14 +16,14 @@ import type { FeltDrivePressure } from "./pressure.js";
 /**
  * Determines the being's overall orientation from pressure and practice state.
  *
- * The algorithm:
- * - If total felt pressure is low → clear or held (depending on practice depth)
- * - If total felt pressure is moderate-to-high:
- *   - Strong practices → held
- *   - Moderate practices → stretched
- *   - Weak/absent practices → consumed
+ * Uses average felt pressure across drives (not total) so that a being
+ * with many small gaps doesn't read as overwhelmed. A freshly-authored
+ * being with modest drives should be clear or mildly held, not stretched.
  *
- * Practice-driven orientation shifts nudge toward their target.
+ * The algorithm:
+ * - If average felt pressure is low → clear
+ * - If average is moderate → held (with practices) or stretched (without)
+ * - If average is high → held (strong practices), stretched, or consumed
  *
  * Pure function.
  */
@@ -32,29 +32,27 @@ export function determineOrientation(
   practices: PracticeSet,
   _effects: ComposedEffects,
 ): Orientation {
-  const totalPressure = pressures.reduce((sum, p) => sum + p.feltPressure, 0);
+  if (pressures.length === 0) return "clear";
+
+  const avgPressure =
+    pressures.reduce((sum, p) => sum + p.feltPressure, 0) / pressures.length;
   const avgDepth = averagePracticeDepth(practices);
   const activeCount = activePractices(practices).length;
 
   // Low pressure: the being's needs are largely met
-  if (totalPressure < 0.15) {
+  if (avgPressure < 0.08) {
     return "clear";
   }
 
-  // Moderate pressure
-  if (totalPressure < 0.4) {
-    if (avgDepth >= 0.35 && activeCount >= 2) return "held";
-    if (avgDepth > 0.15 || activeCount >= 1) return "stretched";
+  // Moderate pressure — some drives are asking for attention
+  if (avgPressure < 0.2) {
+    if (avgDepth >= 0.3 && activeCount >= 2) return "held";
+    if (avgDepth > 0.1 || activeCount >= 1) return "stretched";
     return "consumed";
   }
 
-  // High pressure
-  if (avgDepth >= 0.4 && activeCount >= 2) return "held";
-  if (avgDepth > 0.15 || activeCount >= 1) return "stretched";
+  // High pressure — real difficulty
+  if (avgDepth >= 0.35 && activeCount >= 2) return "held";
+  if (avgDepth > 0.1 || activeCount >= 1) return "stretched";
   return "consumed";
-
-  // Note: orientation shifts from practices are handled in the felt-string
-  // generation, where they color the prose rather than overriding the
-  // computed orientation. A being under extreme pressure with good practices
-  // is "held" — the practices *hold* the difficulty, they don't erase it.
 }

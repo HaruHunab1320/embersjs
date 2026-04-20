@@ -18,6 +18,22 @@ import type { DriveSummary, Orientation, PracticeSummary } from "../types.js";
 import type { FeltDrivePressure } from "./pressure.js";
 
 // ---------------------------------------------------------------------------
+// Name casing helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns a drive or practice name in the right casing for prose.
+ * - "start": capitalized, for beginning a sentence.
+ * - "mid": lowercase, for mid-sentence use.
+ */
+function dn(name: string, position: "start" | "mid"): string {
+  if (position === "start") {
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  }
+  return name.toLowerCase();
+}
+
+// ---------------------------------------------------------------------------
 // Drive felt-strings: how individual drives feel at different pressures
 // ---------------------------------------------------------------------------
 
@@ -25,8 +41,7 @@ import type { FeltDrivePressure } from "./pressure.js";
  * Generates a brief felt description for a single drive at its current pressure.
  */
 export function driveFelt(drive: FeltDrivePressure): string {
-  const { name } = drive.drive;
-  const level = drive.drive.level;
+  const name = drive.drive.name;
   const pressure = drive.feltPressure;
 
   if (pressure < 0.05) {
@@ -36,43 +51,43 @@ export function driveFelt(drive: FeltDrivePressure): string {
     return driveQuietUndertone(name);
   }
   if (pressure < 0.35) {
-    return drivePresent(name, level);
+    return drivePresent(name);
   }
-  return driveUrgent(name, level);
+  return driveUrgent(name);
 }
 
 function driveAtPeace(name: string): string {
   const templates = [
-    `${name} is quiet — tended, for now.`,
-    `There is nothing pressing from ${name.toLowerCase()}. A settled thing.`,
-    `${name} rests, needing nothing.`,
+    `${dn(name, "start")} is quiet — tended, for now.`,
+    `There is nothing pressing from ${dn(name, "mid")}. A settled thing.`,
+    `${dn(name, "start")} rests, needing nothing.`,
   ];
   return pick(templates, name);
 }
 
 function driveQuietUndertone(name: string): string {
   const templates = [
-    `A quiet pull from ${name.toLowerCase()}, not yet insistent.`,
-    `${name} hums beneath the surface — present but patient.`,
-    `I notice ${name.toLowerCase()} stirring, gently.`,
+    `A quiet pull from ${dn(name, "mid")}, not yet insistent.`,
+    `${dn(name, "start")} hums beneath the surface — present but patient.`,
+    `I notice ${dn(name, "mid")} stirring, gently.`,
   ];
   return pick(templates, name);
 }
 
-function drivePresent(name: string, _level: number): string {
+function drivePresent(name: string): string {
   const templates = [
-    `${name} presses. Something wants tending here.`,
-    `I feel ${name.toLowerCase()} asking for attention — it has been a while.`,
-    `There is weight to ${name.toLowerCase()} right now. Not yet urgent, but real.`,
+    `${dn(name, "start")} presses. Something wants tending here.`,
+    `I feel ${dn(name, "mid")} asking for attention — it has been a while.`,
+    `There is weight to ${dn(name, "mid")} right now. Not yet urgent, but real.`,
   ];
   return pick(templates, name);
 }
 
-function driveUrgent(name: string, _level: number): string {
+function driveUrgent(name: string): string {
   const templates = [
-    `${name} pulls hard. This is not something I can set aside easily.`,
-    `${name.toLowerCase()} has become loud. It shapes what I can attend to.`,
-    `Something in me strains toward ${name.toLowerCase()} — a need that will not wait.`,
+    `${dn(name, "start")} pulls hard. This is not something I can set aside easily.`,
+    `${dn(name, "start")} has become loud. It shapes what I can attend to.`,
+    `Something in me strains toward ${dn(name, "mid")} — a need that will not wait.`,
   ];
   return pick(templates, name);
 }
@@ -97,27 +112,27 @@ function practiceDescription(practice: PracticeSummary): string {
 
 function practiceDeep(name: string): string {
   const templates = [
-    `${name} runs deep — a resource I can draw from.`,
-    `There is ${name.toLowerCase()} available to me, well-tended.`,
-    `I hold ${name.toLowerCase()} as something earned, not given.`,
+    `${dn(name, "start")} runs deep — a resource I can draw from.`,
+    `There is ${dn(name, "mid")} available to me, well-tended.`,
+    `I hold ${dn(name, "mid")} as something earned, not given.`,
   ];
   return pick(templates, name);
 }
 
 function practiceModerate(name: string): string {
   const templates = [
-    `${name} is present, if I reach for it.`,
-    `I have some ${name.toLowerCase()} to work with.`,
-    `${name} holds, though it has known thinner times.`,
+    `${dn(name, "start")} is present, if I reach for it.`,
+    `I have some ${dn(name, "mid")} to work with.`,
+    `${dn(name, "start")} holds, though it has known thinner times.`,
   ];
   return pick(templates, name);
 }
 
 function practiceThin(name: string): string {
   const templates = [
-    `${name} is thin — I notice its edges fraying.`,
-    `There is less ${name.toLowerCase()} than there used to be.`,
-    `I reach for ${name.toLowerCase()} and find it fragile.`,
+    `${dn(name, "start")} is thin — I notice its edges fraying.`,
+    `There is less ${dn(name, "mid")} than there used to be.`,
+    `I reach for ${dn(name, "mid")} and find it fragile.`,
   ];
   return pick(templates, name);
 }
@@ -217,36 +232,31 @@ function composeHeld(
     parts.push(driveFelt(dominant));
   }
 
-  // The pivot: practice meets the pressure
+  // The pivot: one practice meets the pressure. This is the held turn —
+  // difficulty named, then met. Two observations, not five.
   const holdingPractices = practices.filter((p) => p.active && p.depth > 0.3);
   if (holdingPractices.length > 0) {
     const holder = holdingPractices[0]!;
-    const pivots = [
-      `Still — ${holder.name.toLowerCase()} holds here.`,
-      `And yet, there is something steadying. ${holder.name} has not left.`,
-      `But I have ${holder.name.toLowerCase()} to work with, and that changes the shape of this.`,
+    if (effects.witnessEnabled) {
+      // Witness-enabled pivot: self-aware meeting
+      parts.push(`I notice I am meeting this rather than being swallowed by it. ${dn(holder.name, "start")} holds.`);
+    } else {
+      // Practice-anchored pivot
+      const pivots = [
+        `Still — ${dn(holder.name, "mid")} holds here. I can work with this.`,
+        `And yet there is ${dn(holder.name, "mid")} to draw on. That changes the shape of this.`,
+        `But I have ${dn(holder.name, "mid")} to work with, and that is enough for now.`,
+      ];
+      parts.push(pick(pivots, holder.name));
+    }
+  } else {
+    // No practice to pivot on — close with resolve
+    const closings = [
+      "I will stay with this and see what it asks of me.",
+      "This is workable. Difficult, but workable.",
     ];
-    parts.push(pick(pivots, holder.name));
+    parts.push(pick(closings, "held"));
   }
-
-  // Second drive, if pressing
-  const second = pressures[1];
-  if (second && second.feltPressure > 0.1) {
-    parts.push(driveFelt(second));
-  }
-
-  // Witness: meta-awareness of the holding
-  if (effects.witnessEnabled) {
-    parts.push("I notice I am meeting this rather than being swallowed by it.");
-  }
-
-  // Closing: forward-facing but not denying
-  const closings = [
-    "I can tend to what is here.",
-    "This is workable. Difficult, but workable.",
-    "I will stay with this and see what it asks of me.",
-  ];
-  parts.push(pick(closings, "held"));
 
   return parts.join(" ");
 }
@@ -268,30 +278,22 @@ function composeStretched(
     parts.push(driveFelt(dominant));
   }
 
-  // Second drive compounds
-  const second = pressures[1];
-  if (second && second.feltPressure > 0.1) {
-    parts.push(driveFelt(second));
-  }
-
-  // Practices are thin but not gone
-  const thinPractice = practices.find((p) => p.active && p.depth < 0.4);
-  if (thinPractice) {
-    parts.push(practiceDescription(thinPractice));
-  }
-
-  // Witness: even stretched, the being can observe itself
+  // One more observation: either witness, thin practice, or strain closing.
+  // Pick one — not all three.
   if (effects.witnessEnabled) {
-    parts.push("I notice the strain. I can see what is happening to me, even if I cannot stop it.");
+    parts.push("I can see what is happening to me, even if I cannot steady it.");
+  } else {
+    const thinPractice = practices.find((p) => p.active && p.depth < 0.4);
+    if (thinPractice) {
+      parts.push(practiceDescription(thinPractice));
+    } else {
+      const closings = [
+        "I am not sure how long I can hold this.",
+        "Something in me reaches for steadiness and finds it slipping.",
+      ];
+      parts.push(pick(closings, "stretched"));
+    }
   }
-
-  // The strain shows in the closing
-  const closings = [
-    "I am trying to hold this together. I am not sure how long I can.",
-    "Something in me reaches for steadiness and finds it slipping.",
-    "I notice the strain. I have not broken, but I feel the stretch.",
-  ];
-  parts.push(pick(closings, "stretched"));
 
   return parts.join(" ");
 }
@@ -307,17 +309,18 @@ function composeConsumed(pressures: FeltDrivePressure[], _practices: PracticeSum
 
   const dominant = pressures[0];
   if (dominant && dominant.feltPressure > 0.05) {
+    const name = dominant.drive.name;
     const urgentTemplates = [
-      `${dominant.drive.name}. It is all I can think about.`,
-      `Everything is ${dominant.drive.name.toLowerCase()}. There is nothing else.`,
-      `I need — ${dominant.drive.name.toLowerCase()}. I need it now.`,
+      `${dn(name, "start")}. It is all I can think about.`,
+      `Everything is ${dn(name, "mid")}. There is nothing else.`,
+      `I need — ${dn(name, "mid")}. I need it now.`,
     ];
-    parts.push(pick(urgentTemplates, dominant.drive.name));
+    parts.push(pick(urgentTemplates, name));
   }
 
   const second = pressures[1];
   if (second && second.feltPressure > 0.15) {
-    parts.push(`And ${second.drive.name.toLowerCase()} too. It compounds.`);
+    parts.push(`And ${dn(second.drive.name, "mid")} too. It compounds.`);
   }
 
   // Consumed closings: less prose, more collapse
