@@ -3,9 +3,37 @@
  *
  * Inner architecture for AI beings — drives, practices, and capabilities
  * that shape how a being meets its experience.
+ *
+ * Five integration points:
+ * - `tick(being, dtMs)` — advance time
+ * - `integrate(being, input)` — process events and actions
+ * - `metabolize(being)` — produce prompt-ready inner situation
+ * - `weightAttention(being, candidates)` — weight attention candidates
+ * - `availableCapabilities(being)` — determine accessible capabilities
  */
 
-// Core primitives
+// ---------------------------------------------------------------------------
+// Public API — the five integration points + construction
+// ---------------------------------------------------------------------------
+
+export {
+  createBeing,
+  tick,
+  integrate,
+  metabolize,
+  weightAttention,
+  availableCapabilities,
+  describe,
+  serializeBeing,
+  deserializeBeing,
+} from "./being/index.js";
+
+export type { SerializedBeing } from "./being/index.js";
+
+// ---------------------------------------------------------------------------
+// Core types — the library's public contract
+// ---------------------------------------------------------------------------
+
 export type {
   // Drive types
   Drive,
