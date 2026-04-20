@@ -34,11 +34,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jakobgrant/embersjs.git"
+    "url": "git+https://github.com/HaruHunab1320/embersjs.git"
   },
-  "homepage": "https://github.com/jakobgrant/embersjs#readme",
+  "homepage": "https://github.com/HaruHunab1320/embersjs#readme",
   "bugs": {
-    "url": "https://github.com/jakobgrant/embersjs/issues"
+    "url": "https://github.com/HaruHunab1320/embersjs/issues"
   },
   "keywords": [
     "ai",

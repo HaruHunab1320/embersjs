@@ -186,4 +186,4 @@ The library doesn't call models, manage memory, or orchestrate. It computes inne
 
 An ember is what you *tend*. It survives between fires, glows low through the cold hours, flares when met with attention. That's what this library models: inner life that persists between interactions, fades without tending, and warms in response to what the being meets.
 
-`@embersjs/core` · MIT · Node 20+ · TypeScript-first · [GitHub](https://github.com/jakobgrant/embersjs)
+`@embersjs/core` · MIT · Node 20+ · TypeScript-first · [GitHub](https://github.com/HaruHunab1320/embersjs)
