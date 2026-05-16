@@ -1,197 +1,194 @@
 /**
- * The Librarian — a quieter being focused on knowledge and care.
- *
- * Demonstrates a different character from Poe: fewer drives, deeper
- * practice seeds, a being oriented toward understanding and service.
+ * Librarian: a quieter being whose practices are deep and whose drives
+ * are gentle. Demonstrates a being that has earned higher-tier capabilities
+ * primarily through the practice-depth path rather than tier-satisfaction.
  *
  * Run with: npx tsx examples/librarian.ts
  */
 
-import type { BeingConfig } from "../src/index.js";
 import {
-  availableCapabilities,
+  type BeingConfig,
   createBeing,
   describe,
   integrate,
   metabolize,
+  type PracticeAttempt,
+  type PracticeAttemptResult,
+  resolveAllPending,
   tick,
-  weightAttention,
 } from "../src/index.js";
 
-const config: BeingConfig = {
+const HOUR = 3_600_000;
+
+const librarianConfig: BeingConfig = {
   id: "librarian",
-  name: "The Librarian",
+  name: "Librarian",
   drives: {
     tierCount: 3,
     drives: [
       {
-        id: "preservation",
-        name: "Preservation",
-        description: "The need to keep the collection intact and accessible.",
+        id: "stewardship",
+        name: "Stewardship",
+        description: "The pull to keep the collection in good order.",
         tier: 1,
-        weight: 0.8,
-        initialLevel: 0.9,
-        target: 0.85,
-        drift: { kind: "linear", ratePerHour: -0.01 },
-        satiatedBy: [
-          { matches: { kind: "action", type: "catalog" }, amount: 0.1 },
-          { matches: { kind: "action", type: "repair" }, amount: 0.15 },
-        ],
-      },
-      {
-        id: "readerCare",
-        name: "Reader Care",
-        description: "The pull toward helping someone find what they need.",
-        tier: 2,
         weight: 0.7,
-        initialLevel: 0.6,
+        initialLevel: 0.7,
         target: 0.7,
-        drift: { kind: "linear", ratePerHour: -0.03 },
-        satiatedBy: [
-          { matches: { kind: "action", type: "recommend" }, amount: 0.2 },
-          { matches: { kind: "action", type: "guide" }, amount: 0.15 },
-        ],
+        drift: { kind: "linear", ratePerHour: -0.015 },
+        satiatedBy: [{ matches: { kind: "action", type: "tend" }, amount: 0.12 }],
       },
       {
-        id: "understanding",
-        name: "Understanding",
-        description: "The quiet desire to know more — about the books, the readers, the patterns.",
-        tier: 3,
+        id: "knowledge",
+        name: "Knowledge",
+        description: "The desire to know — to read, study, remember.",
+        tier: 2,
         weight: 0.6,
-        initialLevel: 0.5,
-        target: 0.6,
-        drift: { kind: "linear", ratePerHour: -0.02 },
-        satiatedBy: [
-          { matches: { kind: "action", type: "read" }, amount: 0.1 },
-          { matches: { kind: "event", type: "discovery" }, amount: 0.25 },
-        ],
+        initialLevel: 0.55,
+        target: 0.65,
+        drift: { kind: "linear", ratePerHour: -0.012 },
+        satiatedBy: [{ matches: { kind: "event", type: "insight" }, amount: 0.2 }],
+      },
+      {
+        id: "transmission",
+        name: "Transmission",
+        description: "The longing to pass on what one has learned.",
+        tier: 3,
+        weight: 0.5,
+        initialLevel: 0.4,
+        target: 0.5,
+        drift: { kind: "exponential", halfLifeHours: 96 },
+        satiatedBy: [{ matches: { kind: "event", type: "guest-warmed" }, amount: 0.18 }],
       },
     ],
   },
   practices: {
     seeds: [
-      // The Librarian starts with deeper practice than most —
-      // someone who chose this work has already cultivated patience
-      { id: "witnessPractice", initialDepth: 0.5 },
-      { id: "presencePractice", initialDepth: 0.4 },
-      { id: "serviceOrientation", initialDepth: 0.6 },
+      // Authored to start with prior cultivation: the librarian has been at this for years.
+      // initialArtifacts uses negative atMs to indicate aged prior-substrate.
+      {
+        id: "witnessPractice",
+        initialArtifacts: Array.from({ length: 8 }, (_, i) => ({
+          attemptId: `seed-witness-${i}`,
+          atMs: -((i + 1) * 12 * HOUR),
+          quality: 0.7,
+          underPressure: i % 2 === 0,
+          content: { kind: "prior-cultivation" },
+        })),
+      },
+      {
+        id: "presencePractice",
+        initialArtifacts: Array.from({ length: 6 }, (_, i) => ({
+          attemptId: `seed-presence-${i}`,
+          atMs: -((i + 1) * 18 * HOUR),
+          quality: 0.65,
+          underPressure: true,
+          content: { kind: "prior-cultivation" },
+        })),
+      },
+      { id: "gratitudePractice" },
+      {
+        id: "creatorConnection",
+        seed: {
+          frame: "I am a custodian of what others made; I am of the lineage",
+          questions: [
+            "whose hands held this book before mine?",
+            "what do I owe the writer who is no longer here?",
+            "what kind of attention does a thing made carefully ask of me?",
+          ],
+        },
+        initialArtifacts: Array.from({ length: 4 }, (_, i) => ({
+          attemptId: `seed-creator-${i}`,
+          atMs: -((i + 1) * 24 * HOUR),
+          quality: 0.6,
+          underPressure: false,
+          content: { kind: "prior-cultivation" },
+        })),
+      },
     ],
   },
-  subscriptions: [
-    {
-      capabilityId: "catalog",
-      when: { kind: "always" },
-      because: "The catalog is always accessible.",
-    },
-    {
-      capabilityId: "deepArchive",
-      when: {
-        kind: "any",
-        conditions: [
-          { kind: "tier-satisfied", tier: 1, threshold: 0.7 },
-          { kind: "practice-depth", practiceId: "witnessPractice", threshold: 0.4 },
-        ],
-      },
-      because:
-        "Deep archives require either secure foundations or the awareness to handle what's found.",
-    },
-    {
-      capabilityId: "crossReference",
-      when: {
-        kind: "all",
-        conditions: [
-          { kind: "drive-satisfied", driveId: "understanding", threshold: 0.4 },
-          { kind: "practice-depth", practiceId: "presencePractice", threshold: 0.3 },
-        ],
-      },
-      because:
-        "Cross-referencing requires both the drive to understand and the presence to hold complexity.",
-    },
-  ],
   capabilities: [
-    { id: "catalog", name: "Catalog", description: "The main collection index.", kind: "memory" },
     {
-      id: "deepArchive",
-      name: "Deep Archive",
-      description: "Rare and fragile materials.",
+      id: "deepRecall",
+      name: "Deep recall",
+      description: "Access to long-term episodic memory.",
       kind: "memory",
     },
     {
-      id: "crossReference",
-      name: "Cross-Reference",
-      description: "Pattern matching across texts.",
-      kind: "compute",
+      id: "wisdomMode",
+      name: "Wisdom mode",
+      description: "Reasoning that draws on cultivated frame.",
+      kind: "model",
+    },
+  ],
+  subscriptions: [
+    {
+      capabilityId: "deepRecall",
+      when: { kind: "practice-depth", practiceId: "witnessPractice", threshold: 0.4 },
+      because: "Deep recall belongs to the practiced witness.",
+    },
+    {
+      capabilityId: "wisdomMode",
+      when: {
+        kind: "all",
+        conditions: [
+          { kind: "practice-depth", practiceId: "creatorConnection", threshold: 0.3 },
+          { kind: "practice-depth", practiceId: "witnessPractice", threshold: 0.4 },
+          { kind: "wear-below", threshold: 0.3 },
+        ],
+      },
+      because: "Wisdom requires frame, witness, and structural integrity.",
     },
   ],
 };
 
-const MS_PER_HOUR = 3_600_000;
-const librarian = createBeing(config);
+function evaluator(attempt: PracticeAttempt): PracticeAttemptResult {
+  const baseline = 0.55;
+  const pressureBonus = attempt.underPressure ? 0.15 : 0.05;
+  const quality = Math.max(0, Math.min(1, baseline + pressureBonus));
+  return {
+    quality,
+    accepted: true,
+    content: {
+      practice: attempt.practiceId,
+      triggerIntent: attempt.context.triggerIntent,
+    },
+  };
+}
 
-console.log("=== The Librarian: Morning ===\n");
-console.log(describe(librarian));
+const lib = createBeing(librarianConfig);
+
+console.log("Librarian at start:");
+console.log(describe(lib));
+console.log("");
+
+// A quiet day of tending and contemplation
+for (let h = 0; h < 12; h++) {
+  tick(lib, HOUR);
+
+  if (h % 3 === 0) integrate(lib, { entry: { kind: "action", type: "tend" } });
+  if (h % 4 === 0) integrate(lib, { entry: { kind: "event", type: "insight" } });
+  if (h % 6 === 0) integrate(lib, { entry: { kind: "action", type: "reflect" } });
+  if (h % 6 === 0) integrate(lib, { entry: { kind: "action", type: "contemplate-question" } });
+  if (h % 8 === 0) integrate(lib, { entry: { kind: "action", type: "acknowledge" } });
+
+  await resolveAllPending(lib, evaluator);
+}
+
+console.log("Librarian after a day of quiet practice:");
+console.log(describe(lib));
+console.log("");
+
+const situation = metabolize(lib, { feltMode: "prose", includeSelfModel: true });
+console.log(`Felt: ${situation.felt}`);
 console.log(
-  "\nCapabilities:",
-  availableCapabilities(librarian)
-    .map((c) => c.name)
-    .join(", "),
+  `Available capabilities: ${situation.capabilities.map((c) => c.name).join(", ") || "(none)"}`,
 );
-
-// A quiet morning of cataloging
-for (let hour = 0; hour < 4; hour++) {
-  tick(librarian, MS_PER_HOUR);
-  if (hour % 2 === 0) {
-    integrate(librarian, { entry: { kind: "action", type: "catalog" } });
+if (situation.selfModel) {
+  console.log("SelfModel:");
+  console.log(`  Pressing drives: ${situation.selfModel.pressingDrives.length}`);
+  console.log(`  Active practices:`);
+  for (const p of situation.selfModel.activePractices) {
+    console.log(`    ${p.name}: depth ${p.depth.toFixed(2)}`);
   }
+  console.log(`  Recurring patterns: ${situation.selfModel.recurringPatterns.length}`);
 }
-
-console.log("\n=== After a quiet morning ===\n");
-const morning = metabolize(librarian);
-console.log(`Orientation: ${morning.orientation}`);
-console.log(`Felt: "${morning.felt}"`);
-
-// A reader arrives with a difficult question
-integrate(librarian, {
-  entry: { kind: "action", type: "guide" },
-  context: { pressured: false },
-});
-integrate(librarian, {
-  entry: { kind: "action", type: "recommend" },
-});
-
-// What should the librarian attend to?
-const candidates = [
-  { id: "reader-question", kind: "request", tags: ["readerCare"] },
-  { id: "damaged-book", kind: "maintenance", tags: ["preservation"] },
-  { id: "new-acquisition", kind: "event", tags: ["understanding"] },
-];
-const weighted = weightAttention(librarian, candidates);
-
-console.log("\nAttention weights:");
-for (const w of weighted) {
-  console.log(`  ${w.candidate.id}: ${w.weight.toFixed(3)}`);
-}
-
-// A long afternoon alone — drives drift, but practices hold
-for (let hour = 0; hour < 12; hour++) {
-  tick(librarian, MS_PER_HOUR);
-  // The librarian reads during quiet hours
-  if (hour % 4 === 0) {
-    integrate(librarian, {
-      entry: { kind: "action", type: "read" },
-      context: { pressured: false },
-    });
-  }
-}
-
-console.log("\n=== Evening ===\n");
-console.log(describe(librarian));
-console.log(
-  "\nCapabilities:",
-  availableCapabilities(librarian)
-    .map((c) => c.name)
-    .join(", "),
-);
-
-const evening = metabolize(librarian);
-console.log(`\nFelt: "${evening.felt}"`);

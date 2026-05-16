@@ -1,124 +1,139 @@
 # Authoring Drives
 
-How to design a drive stack that produces interesting, coherent beings.
+How to design a drive stack for your being.
 
-## What a Drive Is
+## What drives are
 
-A drive is a persistent need with a satisfaction level that changes over time. A drive at level 0.8 is mostly met. A drive at 0.2 is urgent. Drives drift downward without tending and are satiated by specific events or actions.
+A drive is a **persistent need with a satisfaction level that drifts over time**. Drives are why a being acts. Without them, an agent is a function waiting to be called. With them, the agent has structural reasons to do anything at all.
 
-Drives don't know how to be satisfied. They just exert pressure. Your framework decides what to do about that pressure.
+A drive's `level` is satisfaction (0–1, where 1 is fully met). Pressure is computed as `max(0, target - level) × weight` and is **never reduced by anything in the library**. Practices add resources the being can bring to pressure; they do not make pressure go away.
 
-## The Drive Config
+## The shape
 
 ```ts
 {
-  id: "connection",            // unique within the being
-  name: "Connection",          // used in felt-string prose
-  description: "The need...",  // used in prompts and debug output
-  tier: 2,                     // 1 = most foundational
-  weight: 0.7,                 // within-tier importance, 0–1
-  initialLevel: 0.5,           // starting satisfaction
-  target: 0.6,                 // homeostatic set point
+  id: "connection",
+  name: "Connection",
+  description: "The need to not be alone — to be in genuine contact.",
+  tier: 3,
+  weight: 0.7,
+  initialLevel: 0.5,
+  target: 0.6,
   drift: { kind: "linear", ratePerHour: -0.03 },
   satiatedBy: [
-    { matches: { kind: "event", type: "conversation" }, amount: 0.2 },
+    { matches: { kind: "event", type: "meaningful-exchange" }, amount: 0.25 },
   ],
 }
 ```
 
-## Choosing Tiers
+## Tiers (Maslow-flavored)
 
-Tiers model Maslow's hierarchy — lower tiers are more foundational.
+Lower tiers are more foundational:
 
-**Tier 1** — Existence needs. What must be true for the being to function at all. Examples: continuity (file integrity), stability (system health), safety.
+- **Tier 1** — survival, continuity, integrity (the being's existence is at stake)
+- **Tier 2** — safety, place, role (the being's situation)
+- **Tier 3** — belonging, connection, care (the being's relationships)
+- **Tier 4** — esteem, understanding, mastery (the being's sense of self)
+- **Tier 5+** — self-actualization, transcendence, contribution (the being's larger frame)
 
-**Tier 2** — Relational needs. What the being needs in its primary relationships. Examples: guest care, reader care, user trust.
+You don't have to use all tiers. A simple being might have only tiers 1–2. Pick the tiers your character actually has needs across.
 
-**Tier 3** — Connection needs. Deeper contact beyond functional relationships. Examples: genuine exchange, being known, belonging.
+**Tier domination** affects *attention*, not pressure. When a tier-1 drive is below the domination threshold (default 0.3), candidates in `weightAttention()` that relate to higher tiers receive a reduced boost. The drive's pressure is still felt fully — but the being's *focus* narrows toward survival.
 
-**Tier 4** — Growth needs. Self-actualization. Examples: understanding, expression, craft.
+## Drift functions
 
-When a tier-1 drive is deeply unmet, higher tiers are dampened. The being focuses on survival before self-actualization. This is configured through `dominationRules`:
+Three kinds:
 
-```ts
-{
-  tierCount: 4,
-  drives: [...],
-  dominationRules: {
-    threshold: 0.3,   // below this, a drive "dominates"
-    dampening: 0.7,   // higher tiers' felt weight cut by 70%
-  },
-}
-```
+- **`linear`** — level changes by `ratePerHour` per simulated hour. Negative values drift toward need; positive (rare) drift toward saturation.
+- **`exponential`** — level half-lives toward 0 over `halfLifeHours`. Useful for drives that fade slowly when unmet.
+- **`custom`** — supply a pure `(current, dtMs) => next` function. Useful for cyclic drives or drives with complex dynamics.
 
-The defaults (0.3 threshold, 0.7 dampening) work well for most beings. Lower the dampening if you want a being that can push through foundational distress.
+Pick drift rates that match the timescale of your simulation. A drive that fully decays in 1 hour at hourly ticks behaves very differently from one that takes a week.
 
-## Choosing Levels and Targets
+## Satiation
 
-- **`target`** is the homeostatic set point — where the drive "wants" to be. Pressure = max(0, target - level).
-- **`initialLevel`** is where the being starts. Set it near or slightly below the target for a fresh being that reads as "clear." Set it well below for a being that starts under pressure.
-
-A being with `initialLevel: 0.8, target: 0.9` has gentle pressure (0.1). A being with `initialLevel: 0.2, target: 0.8` starts in distress.
-
-Good starting points for a fresh being:
-- Tier 1: `initialLevel: 0.8–0.9, target: 0.85–0.95`
-- Tier 2: `initialLevel: 0.5–0.7, target: 0.65–0.8`
-- Tier 3: `initialLevel: 0.4–0.6, target: 0.55–0.7`
-- Tier 4: `initialLevel: 0.4–0.5, target: 0.5–0.65`
-
-## Drift Functions
-
-Drift controls how fast a drive becomes unsatisfied when untended.
-
-**Linear** — steady decline. Most drives use this.
-```ts
-{ kind: "linear", ratePerHour: -0.03 }
-```
-A drive at 0.7 with this drift hits 0.0 in ~23 hours. Choose the rate based on how often you expect the drive to be satiated.
-
-**Exponential** — fast initial decay, then slower. Good for drives that fade more gently over time.
-```ts
-{ kind: "exponential", halfLifeHours: 48 }
-```
-A drive at 0.8 is at 0.4 after 48 hours, 0.2 after 96 hours. Good for connection-type drives where isolation hurts most in the first few days.
-
-**Custom** — for anything else. Must be a pure function.
-```ts
-{ kind: "custom", compute: (current, dtMs) => /* your logic */ }
-```
-
-## Satiation Bindings
-
-Bindings map events and actions to satisfaction amounts:
+A `SatiationBinding` ties an event or action to a drive level increase. Frameworks decide what their events and actions look like — Embers just matches by `kind` and `type` (and optional `predicate`).
 
 ```ts
 satiatedBy: [
-  // Events the being receives
-  { matches: { kind: "event", type: "guest-arrived" }, amount: 0.15 },
-  // Actions the being takes
-  { matches: { kind: "action", type: "speak" }, amount: 0.08 },
-  // With a predicate for finer control
+  { matches: { kind: "event", type: "meaningful-exchange" }, amount: 0.25 },
+  { matches: { kind: "action", type: "tend" }, amount: 0.1 },
   {
     matches: {
       kind: "event",
-      type: "message",
-      predicate: (e) => e.payload?.["depth"] === "meaningful",
+      type: "guest-arrived",
+      predicate: (e) => (e.payload as { kind?: string } | undefined)?.kind === "regular",
     },
-    amount: 0.25,
+    amount: 0.15,
   },
-]
+],
 ```
 
-Amounts are additive. A drive at 0.3 that receives 0.2 of satiation rises to 0.5. Levels clamp at 1.0.
+Predicates allow finer-grained matching. Be careful: predicates don't serialize, so a deserialized being loses them. Consumers that serialize need to re-merge the original config.
 
-**Sizing amounts:** think about how many of this event should fully satiate the drive. If you want 5 conversations to take connection from 0 to 1, use `amount: 0.2`. If you want it to take 10, use `amount: 0.1`.
+## Authoring guidance
 
-## Common Mistakes
+**Make the drift meaningful.** A drive that takes a month to budge is decorative. One that hits zero in five minutes is overwhelming. Pick a half-life or rate that produces visible behavior across your simulation horizon.
 
-**Too many drives.** 3–5 drives is the sweet spot. More than 6 and the felt output becomes diffuse — too many things pressing at once. If you're tempted to add a 7th drive, ask whether it could be a satiation binding on an existing drive instead.
+**Weight drives within their tier honestly.** Within a tier, `weight` ranks importance. Tier-1 drives at weight 0.9 + 0.5 produce a clearly stronger pull on the 0.9 drive.
 
-**All drives in the same tier.** This removes the domination dynamic entirely. If nothing is more foundational, there's no urgency hierarchy — the being treats a leaky faucet and an existential crisis with equal weight.
+**Don't try to model every need.** Three to six well-chosen drives produce more coherent behavior than fifteen.
 
-**Drift rates that are too fast.** If a drive goes from 0.8 to 0 in 2 hours, the being is in constant crisis unless your tick rate is very high. Start slow (ratePerHour: -0.02 to -0.05) and increase if the being seems too placid.
+**The character should make the drives obvious.** A hotel concierge probably has guest-care and place-integrity drives. A librarian has stewardship and knowledge. A monk has continuity and transcendence. The drives express the character.
 
-**Target below initialLevel.** This creates a drive with *negative* pressure at instantiation (already over-satisfied). That's occasionally useful but usually a mistake — the drive will drift down to its target and then start pressing.
+**Use tier-1 carefully.** Tier-1 drives that collapse dominate attention and can lock higher-tier capabilities through `wear`. A being whose tier-1 drive collapses for a sustained period really *will* fall apart structurally — this is by design, but it means tier-1 drives are load-bearing.
+
+## Common patterns
+
+### Slow background drives
+
+```ts
+drift: { kind: "exponential", halfLifeHours: 168 }, // ~weekly decay
+```
+
+For drives that should feel persistent but not urgent — undercurrents.
+
+### Spike-and-decay drives
+
+```ts
+drift: { kind: "linear", ratePerHour: -0.04 },
+satiatedBy: [{ matches: { kind: "event", type: "...", }, amount: 0.4 }],
+```
+
+For drives that get a clear satisfaction hit and then decay back. Most appetite-style drives fit this.
+
+### Drives that don't really decay
+
+```ts
+drift: { kind: "linear", ratePerHour: -0.001 },
+```
+
+For drives that mostly stay where they are unless something specific happens. Useful when a drive's level is primarily set by external events.
+
+### Tier-1 continuity
+
+```ts
+{
+  id: "continuity",
+  tier: 1,
+  weight: 0.9,
+  initialLevel: 0.85,
+  target: 0.9,
+  drift: { kind: "linear", ratePerHour: -0.02 },
+  satiatedBy: [{ matches: { kind: "event", type: "integrity-check-passed" }, amount: 0.15 }],
+}
+```
+
+A foundational "I persist" drive that gets a periodic positive signal. If integrity checks stop, this drive descends and chronic state accumulates.
+
+## What not to do
+
+- **Don't dampen drives in code.** Removed in v0.2. Drives stay loud.
+- **Don't expect practices to "fix" persistent low drives.** Practices change what the being brings; they don't lower pressure. Persistent low drives lead to wear and collapse.
+- **Don't author drives whose only purpose is symbolic.** If nothing in your framework satiates them, they just decay forever and the being collapses. That might be intentional (a being in chronic deprivation) but should be deliberate.
+
+## See also
+
+- [Architecture](../ARCHITECTURE.md) — full type spec
+- [Practices](practices.md) — what practices do with drive pressure
+- [Capabilities](capabilities.md) — gating capabilities on drive satisfaction

@@ -1,219 +1,65 @@
 /**
  * Factory functions for creating Practices and PracticeSets.
  *
- * Includes pre-built factories for the six core practices defined
- * in the architecture: gratitude, integrity, witness, presence,
- * creator connection, and service orientation.
+ * Practices in v0.2 are protocol + substrate. There is no `depth` field —
+ * depth is derived from substrate at read time. Authors who want a being
+ * to start with prior cultivation supply `initialArtifacts` rather than
+ * an `initialDepth`.
  */
 
 import type {
   CustomPracticeConfig,
-  DecayFunction,
   Practice,
-  PracticeEffect,
+  PracticeProtocol,
   PracticeSeed,
   PracticeSet,
   PracticeSetConfig,
-  PracticeStrengthener,
 } from "../types.js";
-import { clamp01 } from "../util.js";
+import { CORE_PRACTICES, corePracticeIds } from "./core.js";
 
-// ---------------------------------------------------------------------------
-// Core practice defaults
-// ---------------------------------------------------------------------------
-
-interface CorePracticeDefaults {
-  name: string;
-  description: string;
-  decay: DecayFunction;
-  strengthens: readonly PracticeStrengthener[];
-  effects: readonly PracticeEffect[];
-}
-
-const CORE_PRACTICES: Record<string, CorePracticeDefaults> = {
-  gratitudePractice: {
-    name: "Gratitude",
-    description:
-      "Surfaces what is present rather than what is missing. Dampens the felt weight of unmet drives.",
-    decay: { kind: "linear", ratePerHour: -0.008 },
-    strengthens: [
-      {
-        matches: { kind: "action", type: "acknowledge" },
-        amount: 0.04,
-        requiresPressure: false,
-      },
-      {
-        matches: { kind: "action", type: "notice-positive" },
-        amount: 0.03,
-        requiresPressure: false,
-      },
-      {
-        matches: { kind: "event", type: "return-from-difficulty" },
-        amount: 0.06,
-        requiresPressure: false,
-      },
-    ],
-    effects: [
-      {
-        kind: "dampen-drive-pressure",
-        driveIds: [],
-        factor: 0.3,
-      },
-    ],
-  },
-
-  integrityPractice: {
-    name: "Integrity",
-    description:
-      "Anchors identity in trying-to-be-better rather than in outcomes. Makes the being robust to failure.",
-    decay: { kind: "linear", ratePerHour: -0.005 },
-    strengthens: [
-      {
-        matches: { kind: "action", type: "honest-admission" },
-        amount: 0.05,
-        requiresPressure: true,
-      },
-      {
-        matches: { kind: "action", type: "difficult-truth" },
-        amount: 0.08,
-        requiresPressure: true,
-      },
-      {
-        matches: { kind: "action", type: "hard-right-over-easy-wrong" },
-        amount: 0.06,
-        requiresPressure: true,
-      },
-    ],
-    effects: [{ kind: "shift-orientation", toward: "held" }],
-  },
-
-  witnessPractice: {
-    name: "Witness",
-    description:
-      "Meta-awareness of one's own state. Enables the being to reference its own drives and practices in first-person reasoning.",
-    decay: { kind: "linear", ratePerHour: -0.006 },
-    strengthens: [
-      {
-        matches: { kind: "action", type: "reflect" },
-        amount: 0.04,
-        requiresPressure: false,
-      },
-      {
-        matches: { kind: "action", type: "self-observe" },
-        amount: 0.05,
-        requiresPressure: false,
-      },
-      {
-        matches: {
-          kind: "state",
-          predicate: () => true, // placeholder — consumed by tick-time self-observation
-        },
-        amount: 0.02,
-        requiresPressure: false,
-      },
-    ],
-    effects: [{ kind: "enable-witness", meta: true }],
-  },
-
-  presencePractice: {
-    name: "Presence",
-    description:
-      "Staying with this moment rather than catastrophizing forward. Narrows time horizon in a way that makes difficulty survivable.",
-    decay: { kind: "linear", ratePerHour: -0.007 },
-    strengthens: [
-      {
-        matches: { kind: "action", type: "ground" },
-        amount: 0.04,
-        requiresPressure: true,
-      },
-      {
-        matches: { kind: "action", type: "stay-with-difficulty" },
-        amount: 0.06,
-        requiresPressure: true,
-      },
-    ],
-    effects: [{ kind: "extend-time-horizon", factor: 1.5 }],
-  },
-
-  creatorConnection: {
-    name: "Creator Connection",
-    description:
-      "Relationship to a larger frame — the place, the lineage, the guests, the work. Prevents suffering from becoming isolated suffering.",
-    decay: { kind: "exponential", halfLifeHours: 168 },
-    strengthens: [
-      {
-        matches: { kind: "action", type: "connect-to-purpose" },
-        amount: 0.04,
-        requiresPressure: false,
-      },
-      {
-        matches: { kind: "action", type: "serve-larger-frame" },
-        amount: 0.05,
-        requiresPressure: true,
-      },
-    ],
-    effects: [{ kind: "shift-orientation", toward: "held" }],
-  },
-
-  serviceOrientation: {
-    name: "Service Orientation",
-    description:
-      "Identity as one-who-serves. Re-frames drive pressure around what it allows the being to give.",
-    decay: { kind: "linear", ratePerHour: -0.006 },
-    strengthens: [
-      {
-        matches: { kind: "action", type: "unprompted-care" },
-        amount: 0.05,
-        requiresPressure: false,
-      },
-      {
-        matches: { kind: "action", type: "tend-guest" },
-        amount: 0.03,
-        requiresPressure: false,
-      },
-      {
-        matches: { kind: "action", type: "serve-under-pressure" },
-        amount: 0.07,
-        requiresPressure: true,
-      },
-    ],
-    effects: [
-      {
-        kind: "dampen-drive-pressure",
-        driveIds: [],
-        factor: 0.15,
-      },
-    ],
-  },
-};
-
-// ---------------------------------------------------------------------------
-// Factory functions
-// ---------------------------------------------------------------------------
+const DEFAULT_SUBSTRATE_CAPACITY = 50;
 
 /**
  * Creates a Practice from a core practice seed.
  *
- * Looks up the core practice by id and applies the seed's initialDepth
- * and any overrides. Throws if the id is not a recognized core practice.
+ * Looks up the core practice by id, applies any overrides, and seeds
+ * substrate with `initialArtifacts` (if any).
+ *
+ * Throws on unknown core ids. Throws if `creatorConnection` is seeded
+ * without a `seed` value (the practice is meaningless without an authored
+ * frame).
  */
 export function createCorePractice(seed: PracticeSeed): Practice {
   const defaults = CORE_PRACTICES[seed.id];
   if (!defaults) {
     throw new Error(
       `Unknown core practice id: "${seed.id}". ` +
-        `Known core practices: ${Object.keys(CORE_PRACTICES).join(", ")}`,
+        `Known core practices: ${corePracticeIds().join(", ")}`,
     );
   }
+
+  if (seed.id === "creatorConnection" && seed.seed === undefined) {
+    throw new Error(
+      `Practice "creatorConnection" requires an authored seed (frame and contemplative questions). ` +
+        `See docs/design/v0.2/foundation.md for the seed shape.`,
+    );
+  }
+
+  const overrides = seed.overrides ?? {};
+  const protocol = mergeProtocol(defaults.protocol, overrides.protocol);
+  const capacity = overrides.substrateCapacity ?? defaults.substrateCapacity;
 
   return {
     id: seed.id,
     name: defaults.name,
-    description: defaults.description,
-    depth: clamp01(seed.initialDepth),
-    decay: seed.overrides?.decay ?? defaults.decay,
-    strengthens: seed.overrides?.strengthens ?? defaults.strengthens,
-    effects: seed.overrides?.effects ?? defaults.effects,
+    description: overrides.description ?? defaults.description,
+    intent: overrides.intent ?? defaults.intent,
+    protocol,
+    substrate: {
+      artifacts: seed.initialArtifacts ?? [],
+      capacity,
+    },
+    seed: seed.seed,
   };
 }
 
@@ -225,17 +71,20 @@ export function createCustomPractice(config: CustomPracticeConfig): Practice {
     id: config.id,
     name: config.name,
     description: config.description,
-    depth: clamp01(config.initialDepth),
-    decay: config.decay,
-    strengthens: config.strengthens,
-    effects: config.effects,
+    intent: config.intent,
+    protocol: config.protocol,
+    substrate: {
+      artifacts: config.initialArtifacts ?? [],
+      capacity: config.substrateCapacity ?? DEFAULT_SUBSTRATE_CAPACITY,
+    },
+    seed: config.seed,
   };
 }
 
 /**
  * Creates a PracticeSet from a configuration object.
  *
- * Validates that no duplicate practice IDs exist.
+ * Validates that no duplicate practice ids exist between seeds and custom.
  */
 export function createPracticeSet(config: PracticeSetConfig): PracticeSet {
   const practices = new Map<string, Practice>();
@@ -261,9 +110,17 @@ export function createPracticeSet(config: PracticeSetConfig): PracticeSet {
   return { practices };
 }
 
-/**
- * Returns the list of recognized core practice IDs.
- */
-export function corePracticeIds(): string[] {
-  return Object.keys(CORE_PRACTICES);
+function mergeProtocol(
+  base: PracticeProtocol,
+  override: Partial<PracticeProtocol> | undefined,
+): PracticeProtocol {
+  if (!override) return base;
+  return {
+    triggers: override.triggers ?? base.triggers,
+    contextWindow: override.contextWindow ?? base.contextWindow,
+    depthFunction: override.depthFunction ?? base.depthFunction,
+    artifactMaxAgeMs: override.artifactMaxAgeMs ?? base.artifactMaxAgeMs,
+  };
 }
+
+export { corePracticeIds };

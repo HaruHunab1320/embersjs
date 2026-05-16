@@ -1,25 +1,21 @@
 /**
- * Attention weighting: given candidates competing for the being's focus,
- * weight them by how relevant they are to the being's current inner state.
+ * Attention weighting: ranks candidates by relevance to current inner state.
+ *
+ * Tier domination is applied HERE in v0.2 (not in pressure): when a lower
+ * tier is dominating, candidates relevant to higher tiers receive a
+ * reduced boost. This is where Maslow-flavored urgency lives.
+ *
+ * Practice depth (averaged) distributes attention more evenly — pulling
+ * extreme weights toward the mean.
  */
 
-import { composeEffects } from "../practices/effects.js";
+import { dominantTier } from "../drives/query.js";
 import { averagePracticeDepth } from "../practices/query.js";
 import type { AttentionCandidate, Being, WeightedCandidate } from "../types.js";
-import { computeFeltPressures } from "./pressure.js";
+import { computePressures } from "./pressure.js";
 
 /**
- * Weights attention candidates based on the being's drive pressure
- * and practice state.
- *
- * The algorithm:
- * - Each candidate gets a base weight of 0.5
- * - Candidates whose tags overlap with pressing drives get a boost
- *   proportional to the drive's felt pressure
- * - Deep presence practice distributes attention more evenly (reduces
- *   the gap between highest and lowest weights)
- *
- * Pure function. Returns candidates sorted by weight descending.
+ * Weights attention candidates. Pure function. Returns sorted descending.
  */
 export function weightAttention(
   being: Being,
@@ -27,47 +23,42 @@ export function weightAttention(
 ): WeightedCandidate[] {
   if (candidates.length === 0) return [];
 
-  const effects = composeEffects(being.practices);
-  const pressures = computeFeltPressures(being.drives, effects);
+  const pressures = computePressures(being.drives);
+  const domTier = dominantTier(being.drives);
+  const attentionDamp = being.drives.dominationRules.attentionDampening;
 
-  // Build a tag→pressure map from drives
+  // Build tag → adjusted pressure map. Drives above the dominating tier have
+  // their attention contribution reduced (lower-tier urgency dominates focus).
   const tagPressure = new Map<string, number>();
   for (const p of pressures) {
-    if (p.feltPressure > 0) {
-      // Use drive id and name as implicit tags
-      tagPressure.set(p.drive.id, p.feltPressure);
-      tagPressure.set(p.drive.name.toLowerCase(), p.feltPressure);
+    if (p.weightedPressure <= 0) continue;
+    let contrib = p.weightedPressure;
+    if (domTier !== undefined && p.drive.tier > domTier) {
+      contrib = contrib * (1 - attentionDamp);
     }
+    tagPressure.set(p.drive.id, contrib);
+    tagPressure.set(p.drive.name.toLowerCase(), contrib);
   }
 
-  // Weight each candidate
   const weighted = candidates.map((candidate): WeightedCandidate => {
-    let weight = 0.5; // base weight
-
-    // Boost from matching tags
+    let weight = 0.5;
     if (candidate.tags) {
       for (const tag of candidate.tags) {
         const pressure = tagPressure.get(tag);
-        if (pressure !== undefined) {
-          weight += pressure;
-        }
+        if (pressure !== undefined) weight += pressure;
       }
     }
-
     return { candidate, weight };
   });
 
-  // Presence practice: distribute attention more evenly
-  // Deep presence narrows the spread between highest and lowest weights
-  const avgDepth = averagePracticeDepth(being.practices);
+  // Practice depth pulls weights toward the mean (distributes attention).
+  const avgDepth = averagePracticeDepth(being.practices, being.elapsedMs);
   if (avgDepth > 0.2 && weighted.length > 1) {
-    const presenceFactor = Math.min(avgDepth, 0.8); // cap influence
+    const factor = Math.min(avgDepth, 0.8);
     const mean = weighted.reduce((s, w) => s + w.weight, 0) / weighted.length;
-
     for (let i = 0; i < weighted.length; i++) {
       const w = weighted[i]!;
-      // Pull toward the mean by presenceFactor
-      const adjusted = w.weight + (mean - w.weight) * presenceFactor * 0.5;
+      const adjusted = w.weight + (mean - w.weight) * factor * 0.5;
       weighted[i] = { candidate: w.candidate, weight: adjusted };
     }
   }
@@ -81,8 +72,6 @@ export function weightAttention(
     }
   }
 
-  // Sort by weight descending
   weighted.sort((a, b) => b.weight - a.weight);
-
   return weighted;
 }

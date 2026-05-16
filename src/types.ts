@@ -1,24 +1,66 @@
 /**
  * @module types
  *
- * Core type definitions for the Embers library.
+ * Core type definitions for the Embers library (v0.2).
  *
- * Every type here corresponds to a primitive from the architecture:
- * Being, Drive, DriveStack, Practice, PracticeSet, Capability,
- * Subscription, History, and the Metabolism output types.
+ * v0.2 thesis (see docs/design/v0.2/foundation.md):
+ * - Drives press constantly and never quiet — nothing reduces felt drive pressure.
+ * - Practices are real cultivation: protocol + accumulating substrate.
+ *   Depth is derived from substrate (recency × quality × pressure-bonus).
+ * - Wear tracks chronic state separately from orientation; collapse is real,
+ *   recovery is asymmetric, the path back up exists.
+ * - Embers signals; the framework cognizes; Embers integrates the verdict.
+ *   The library never calls a model.
  *
- * These types are the library's public contract. Changes are breaking
- * for every consumer.
+ * These types are the library's public contract. Changes are breaking.
  */
 
 // ---------------------------------------------------------------------------
-// Drive types
+// Common matchers — used by drives and practice triggers
+// ---------------------------------------------------------------------------
+
+/**
+ * Matches an event coming from the consuming framework.
+ * The framework defines what its events look like.
+ */
+export interface EventMatcher {
+  readonly kind: "event";
+  /** Event type to match (e.g., "guest-arrived", "message-received"). */
+  readonly type: string;
+  /** Optional predicate for finer-grained matching. */
+  readonly predicate?: (event: IntegrationEvent) => boolean;
+}
+
+/**
+ * Matches an action the being has taken.
+ * The framework defines what its actions look like.
+ */
+export interface ActionMatcher {
+  readonly kind: "action";
+  /** Action type to match (e.g., "speak", "tend-affordance"). */
+  readonly type: string;
+  /** Optional predicate for finer-grained matching. */
+  readonly predicate?: (action: IntegrationAction) => boolean;
+}
+
+/**
+ * Matches against the being's current state. Used by triggers that fire
+ * based on internal conditions rather than external events.
+ */
+export interface StateMatcher {
+  readonly kind: "state";
+  /** Pure predicate evaluated against the being's current state. */
+  readonly predicate: (state: BeingState) => boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Drives — needs that press constantly. Never dampened by practices.
 // ---------------------------------------------------------------------------
 
 /**
  * How a drive's satisfaction level changes over time absent external input.
  *
- * - `linear`: level changes by a fixed rate per hour (negative = decays toward need).
+ * - `linear`: level changes by a fixed rate per hour.
  * - `exponential`: level half-lives toward 0 over the given period.
  * - `custom`: caller-supplied pure function.
  */
@@ -28,73 +70,32 @@ export type DriftFunction =
   | { readonly kind: "custom"; readonly compute: (current: number, dtMs: number) => number };
 
 /**
- * Matches an event or action for satiation and practice-strengthening purposes.
- *
- * Matchers are intentionally loose — the consuming framework defines what
- * events and actions look like. The library only needs to know whether
- * something matches.
- */
-export interface EventMatcher {
-  readonly kind: "event";
-  /** The event type to match (e.g., "guest-arrived", "message-received"). */
-  readonly type: string;
-  /** Optional predicate for finer-grained matching. */
-  readonly predicate?: (event: IntegrationEvent) => boolean;
-}
-
-export interface ActionMatcher {
-  readonly kind: "action";
-  /** The action type to match (e.g., "speak", "tend-affordance"). */
-  readonly type: string;
-  /** Optional predicate for finer-grained matching. */
-  readonly predicate?: (action: IntegrationAction) => boolean;
-}
-
-/**
- * Matches against the being's current state rather than an event or action.
- * Used by practice strengtheners that fire based on internal conditions
- * (e.g., "the being paused to observe itself during a tick").
- */
-export interface StateMatcher {
-  readonly kind: "state";
-  /** Pure predicate evaluated against the being's current state. */
-  readonly predicate: (state: BeingState) => boolean;
-}
-
-/**
- * A binding that describes what satiates a drive and by how much.
+ * Binds a drive to what events or actions satiate it, and by how much.
  */
 export interface SatiationBinding {
-  /** What event or action satisfies this drive. */
   readonly matches: EventMatcher | ActionMatcher;
-  /** How much satisfaction this provides, 0–1. Clamped to [0, 1] at application time. */
+  /** How much satisfaction this provides per match, 0–1. Clamped at apply time. */
   readonly amount: number;
 }
 
 /**
- * A named, persistent need with a current satisfaction level, a homeostatic
- * set point, and dynamics that govern how it changes over time.
+ * A persistent need with a satisfaction level and dynamics that govern
+ * how it changes over time.
  *
- * A drive's `level` represents *satisfaction*, not *need*.
- * - `1` = fully met
- * - `0` = dire, completely unmet
- *
- * Pressure is computed as `max(0, target - level)`.
+ * `level` is satisfaction (1 = fully met, 0 = dire). Pressure is computed
+ * as `max(0, target - level) * weight` and is never reduced by practices.
  */
 export interface Drive {
-  /** Unique identifier within the being. */
   readonly id: string;
-  /** Human-readable name (e.g., "connection", "continuity"). */
   readonly name: string;
-  /** Description used in prompts and debug output. */
   readonly description: string;
-  /** Tier in the drive stack. 1 = most foundational; higher = more self-actualizing. */
+  /** Tier in the drive stack. 1 = most foundational. */
   readonly tier: number;
   /** Within-tier importance weight, 0–1. */
   readonly weight: number;
   /** Current satisfaction level, 0–1. Mutable during tick and integration. */
   level: number;
-  /** Homeostatic set point the drive tends toward wanting, 0–1. */
+  /** Homeostatic set point the drive tends toward, 0–1. */
   readonly target: number;
   /** How the level changes over time absent input. */
   readonly drift: DriftFunction;
@@ -103,151 +104,333 @@ export interface Drive {
 }
 
 /**
- * Rules governing how unsatisfied lower-tier drives dominate higher-tier activity.
- *
- * When any drive in a lower tier falls below `threshold`, all higher-tier
- * drives have their *felt* weight multiplied by `(1 - dampening)`.
- * Practices can modulate this — see Metabolism.
+ * Rules governing how a dominating lower-tier drive shifts attention away
+ * from higher tiers. In v0.2 this affects attention weighting and orientation
+ * derivation only — drive pressure itself is never reduced.
  */
 export interface DominationRules {
-  /**
-   * Below this satisfaction level, a drive's tier "dominates."
-   * @default 0.3
-   */
+  /** Below this satisfaction level, a drive's tier "dominates." Default 0.3. */
   readonly threshold: number;
-  /**
-   * How much higher-tier felt weight is reduced when dominated, 0–1.
-   * @default 0.7
-   */
-  readonly dampening: number;
+  /** How much higher-tier attention weight is reduced when dominated, 0–1. Default 0.7. */
+  readonly attentionDampening: number;
 }
 
 /**
  * A tiered organization of a being's drives.
- *
- * Lower tiers are more foundational. When a lower tier is sufficiently
- * unsatisfied, it dampens higher-tier activity (modulated by practices).
  */
 export interface DriveStack {
-  /** All drives, keyed by their id. */
   readonly drives: Map<string, Drive>;
-  /** Number of tiers in this stack. */
   readonly tierCount: number;
-  /** Rules for how lower-tier deprivation affects higher tiers. */
   readonly dominationRules: DominationRules;
 }
 
 // ---------------------------------------------------------------------------
-// Practice types
+// Practices — protocols + accumulating substrate. Depth derived, not stored.
 // ---------------------------------------------------------------------------
 
 /**
- * How a practice decays over time when untended.
- *
- * - `linear`: depth drops by a fixed rate per hour.
- * - `exponential`: depth half-lives toward 0.
- * - `custom`: caller-supplied pure function.
+ * Specifies what slice of the being's recent experience to include in a
+ * practice attempt's evaluation context.
  */
-export type DecayFunction =
-  | { readonly kind: "linear"; readonly ratePerHour: number }
-  | { readonly kind: "exponential"; readonly halfLifeHours: number }
-  | { readonly kind: "custom"; readonly compute: (current: number, dtMs: number) => number };
-
-/**
- * Defines what kinds of events, actions, or states develop a practice,
- * and whether development requires the being to be under drive pressure.
- */
-export interface PracticeStrengthener {
-  /** What matches to trigger strengthening. */
-  readonly matches: EventMatcher | ActionMatcher | StateMatcher;
-  /** How much depth this adds per match, 0–1. Clamped at application time. */
-  readonly amount: number;
-  /**
-   * When true, this strengthener only fires if the being is currently
-   * under drive pressure. Choosing integrity when it's easy doesn't
-   * develop integrityPractice — pressure is required.
-   */
-  readonly requiresPressure: boolean;
+export interface ContextWindowSpec {
+  /** Maximum number of recent integration entries to include. Default 50. */
+  readonly entries?: number;
+  /** Maximum age of entries (ms). Default 24h (86_400_000). Used with `entries`,
+   *  the more restrictive of the two wins. */
+  readonly maxAgeMs?: number;
+  /** Whether to include a slice of drive trajectory. Default true. */
+  readonly includeTrajectory?: boolean;
+  /** Whether to include other active practices' recent substrate. Default false. */
+  readonly includeRelatedSubstrate?: boolean;
 }
 
 /**
- * The concrete effects a practice has on a being's metabolism.
+ * A function that computes a practice's depth from its accumulated substrate.
  *
- * Practices modify how drives are *felt*, not whether they exist.
- * A practice never changes a drive's level directly.
+ * The default depth function combines artifact quality, recency
+ * (exponential decay over a half-life), and a pressure-tested bonus.
+ *
+ * Pure function. Same substrate + same nowMs produce the same depth.
  */
-export type PracticeEffect =
-  | {
-      /** Dampens the felt pressure of specific drives. */
-      readonly kind: "dampen-drive-pressure";
-      /** Which drives are affected. Empty array means all drives. */
-      readonly driveIds: readonly string[];
-      /** Dampening factor, 0–1. Applied proportionally to practice depth. */
-      readonly factor: number;
-    }
-  | {
-      /** Narrows perceived time horizon, making crisis feel more local. */
-      readonly kind: "extend-time-horizon";
-      /** Factor by which the time horizon perception is extended. */
-      readonly factor: number;
-    }
-  | {
-      /** Enables the being to reference its own state in first-person reasoning. */
-      readonly kind: "enable-witness";
-      readonly meta: true;
-    }
-  | {
-      /** Shifts the being's overall orientation toward a specific state. */
-      readonly kind: "shift-orientation";
-      readonly toward: "clear" | "held" | "stretched";
-    };
+export type DepthFunction = (substrate: PracticeSubstrate, nowMs: number) => number;
 
 /**
- * A cultivated orientation the being maintains.
+ * A trigger that, when matched, records a practice attempt for evaluation.
  *
- * Practices aren't needs (not felt as pressure) and aren't capabilities
- * (not resources). They're commitments that shape how the being
- * metabolizes experience.
+ * Triggers do NOT directly increase depth in v0.2. They produce attempts
+ * that the consuming framework evaluates; depth derives from the resulting
+ * substrate.
+ */
+export interface PracticeTrigger {
+  /** What event/action/state matches this trigger. */
+  readonly matches: EventMatcher | ActionMatcher | StateMatcher;
+  /** When true, the trigger only fires while the being is under drive pressure. */
+  readonly requiresPressure: boolean;
+  /**
+   * Authorial intent for this trigger — a short description of what cognitive
+   * work this attempt is meant to represent. Surfaced to the evaluator.
+   */
+  readonly intent: string;
+  /**
+   * Maximum contribution to depth (per artifact) if evaluated at quality 1.0.
+   * Replaces v0.1's `amount`. Effective contribution = maxContribution × quality.
+   */
+  readonly maxContribution: number;
+}
+
+/**
+ * Declares how a practice gets engaged: what triggers attempts, what context
+ * the framework receives for evaluation, and how depth is derived.
+ */
+export interface PracticeProtocol {
+  /** What triggers attempts at this practice. */
+  readonly triggers: readonly PracticeTrigger[];
+  /** What slice of experience is included in attempt context. */
+  readonly contextWindow: ContextWindowSpec;
+  /** Optional custom depth function. Defaults to recency-quality-pressure. */
+  readonly depthFunction?: DepthFunction;
+  /** Hard age cap for artifacts (ms). Older artifacts evicted at tick time.
+   *  Default: 30 days (2_592_000_000 ms). */
+  readonly artifactMaxAgeMs?: number;
+}
+
+/**
+ * An accumulated artifact from a resolved practice attempt.
  *
- * Key properties:
- * - Develop through chosen practice under pressure, not passive accumulation
- * - Decay if untended
- * - Modify metabolism, not drives directly
+ * The `content` is opaque to Embers — frameworks define its shape. The library
+ * stores artifacts and uses their quality, recency, and pressure-status to
+ * compute depth, but never inspects content.
+ */
+export interface Artifact {
+  /** Reference to the attempt that produced this artifact. */
+  readonly attemptId: string;
+  /** Simulation time when the attempt was resolved. */
+  readonly atMs: number;
+  /** Quality from evaluation, 0–1. */
+  readonly quality: number;
+  /** Whether the originating attempt was made under drive pressure. */
+  readonly underPressure: boolean;
+  /** Framework-supplied content (insight, articulation, choosing-moment, etc.). */
+  readonly content: unknown;
+  /** Optional human-readable rationale from the evaluator. */
+  readonly reasons?: readonly string[];
+}
+
+/**
+ * The accumulating body of a practice's cultivation.
+ *
+ * Bounded ring buffer. New artifacts beyond `capacity` evict the oldest.
+ */
+export interface PracticeSubstrate {
+  readonly artifacts: readonly Artifact[];
+  /** Maximum artifacts retained. Default 50 (configurable per practice). */
+  readonly capacity: number;
+}
+
+/**
+ * A cultivated capacity backed by accumulating substrate.
+ *
+ * Practices have no `depth` field — depth is derived from substrate.
+ * Practices have no `effects` field — they influence the being through
+ * substrate retrieval (in metabolize) and depth-gated capabilities.
  */
 export interface Practice {
-  /** Unique identifier (e.g., "gratitudePractice", "integrityPractice"). */
   readonly id: string;
-  /** Human-readable name. */
   readonly name: string;
-  /** Description used in prompts and debug output. */
   readonly description: string;
-  /** Current depth, 0–1. 0 = absent, 1 = fully developed. Mutable. */
-  depth: number;
-  /** How quickly this practice erodes if untended. */
-  readonly decay: DecayFunction;
-  /** What kinds of events/actions/states develop this practice. */
-  readonly strengthens: readonly PracticeStrengthener[];
-  /** How this practice modifies metabolism when active. */
-  readonly effects: readonly PracticeEffect[];
+  /**
+   * Authorial intent — what cultivation this practice represents.
+   * Surfaced to the framework's evaluator to construct evaluation prompts.
+   */
+  readonly intent: string;
+  /** How the practice gets engaged. */
+  readonly protocol: PracticeProtocol;
+  /** Accumulating substrate. Mutable through resolveAttempt and tick. */
+  substrate: PracticeSubstrate;
+  /**
+   * Optional author-supplied seed material the practice cultivates around
+   * (e.g., the frame and contemplative questions for creator-connection).
+   * Opaque to Embers; surfaced to the evaluator.
+   */
+  readonly seed?: unknown;
 }
 
 /**
  * The set of all practices a being maintains.
  */
 export interface PracticeSet {
-  /** All practices, keyed by their id. */
   readonly practices: Map<string, Practice>;
 }
 
 // ---------------------------------------------------------------------------
-// Capability & subscription types
+// Practice attempts — the two-phase evaluation mechanic
 // ---------------------------------------------------------------------------
 
 /**
- * The kind of resource a capability represents.
+ * A snapshot of context provided to the framework's evaluator.
  *
- * The library doesn't know what to *do* with a capability —
- * it tells the consuming framework which ones are currently available.
+ * Rich enough that a framework can construct a meaningful LLM prompt or
+ * apply rule-based evaluation. Embers does not invent content.
+ */
+export interface PracticeAttemptContext {
+  /** The practice being attempted. */
+  readonly practice: {
+    readonly id: string;
+    readonly name: string;
+    readonly description: string;
+    readonly intent: string;
+    /** Depth at attempt time (computed). */
+    readonly currentDepth: number;
+    /** Author seed, if any (e.g., creator-connection's frame). */
+    readonly seed?: unknown;
+  };
+  /** Authorial intent for the trigger that fired. */
+  readonly triggerIntent: string;
+  /** Drive levels at attempt time. */
+  readonly driveLevels: Readonly<Record<string, number>>;
+  /** Practice depths at attempt time (all practices). */
+  readonly practiceDepths: Readonly<Record<string, number>>;
+  /** Whether the being was under drive pressure. */
+  readonly underPressure: boolean;
+  /** Drives currently below the domination threshold, by id. */
+  readonly pressingDriveIds: readonly string[];
+  /** Recent integration entries — the being's "experience". */
+  readonly recentEntries: readonly RecentEntry[];
+  /** Recent pressured choices from history. */
+  readonly recentPressuredChoices: readonly PressuredChoice[];
+  /** Recent drive trajectory snippet (if includeTrajectory). */
+  readonly recentTrajectory: readonly DriveTrajectoryPoint[];
+  /** Related practices' recent substrate (if includeRelatedSubstrate). */
+  readonly relatedSubstrate: ReadonlyArray<{
+    readonly practiceId: string;
+    readonly artifacts: readonly Artifact[];
+  }>;
+}
+
+/**
+ * A pending practice attempt — recorded by integrate, awaiting evaluation.
+ */
+export interface PracticeAttempt {
+  /** Unique id for tracking across phases. */
+  readonly id: string;
+  /** Which practice is being attempted. */
+  readonly practiceId: string;
+  /** Index into the practice's protocol.triggers array. */
+  readonly triggerIndex: number;
+  /** Event/action that satisfied the matcher. Undefined for state-matched triggers. */
+  readonly triggeredBy?: IntegrationEvent | IntegrationAction;
+  /** Maximum depth contribution this attempt can produce (from trigger.maxContribution). */
+  readonly proposedAmount: number;
+  /** Simulation time when the attempt was recorded. */
+  readonly attemptedAtMs: number;
+  /** Whether the being was under drive pressure when this attempt was recorded. */
+  readonly underPressure: boolean;
+  /** Rich context for evaluation. */
+  readonly context: PracticeAttemptContext;
+  /** Lifecycle state. */
+  readonly status: "pending" | "resolved" | "rejected" | "expired";
+}
+
+/**
+ * The framework's verdict on a practice attempt.
+ */
+export interface PracticeAttemptResult {
+  /** Quality of the cognitive work, 0–1. Scales the contribution. */
+  readonly quality: number;
+  /** Whether the attempt is accepted. If false, no artifact is stored. */
+  readonly accepted: boolean;
+  /** Optional rationale, recorded with the artifact and surfaced in describe. */
+  readonly reasons?: readonly string[];
+  /**
+   * Optional substrate the framework returns. Stored as Artifact.content.
+   * Opaque to Embers; frameworks define shape.
+   */
+  readonly content?: unknown;
+}
+
+/**
+ * The result of resolving one attempt — what changed.
+ */
+export interface AttemptResolution {
+  readonly attemptId: string;
+  readonly practiceId: string;
+  /** Whether the attempt was accepted (artifact stored). */
+  readonly accepted: boolean;
+  /** Artifact created, if accepted. */
+  readonly artifactStored?: Artifact;
+  /** Practice depth before resolution (derived). */
+  readonly depthBefore: number;
+  /** Practice depth after resolution (derived). */
+  readonly depthAfter: number;
+}
+
+// ---------------------------------------------------------------------------
+// Wear — chronic state tracking and the path back up
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-drive chronic state tracker. Hysteresis: accumulates `sustainedBelowMs`
+ * while drive level is below `criticalThreshold`, accumulates `sustainedAboveMs`
+ * while above `recoveryThreshold`. Between thresholds, both hold steady.
+ */
+export interface ChronicTracker {
+  /** Accumulated time below criticalThreshold (ms). Decays slowly during recovery. */
+  readonly sustainedBelowMs: number;
+  /** Accumulated time above recoveryThreshold (ms). Used to confirm recovery. */
+  readonly sustainedAboveMs: number;
+}
+
+/**
+ * Chronic state across all drives.
+ *
+ * `chronicLoad` is a derived 0–1 scalar reflecting how worn down the being
+ * is structurally. Composed from per-drive sustainedBelowMs values, weighted
+ * by tier (lower tiers contribute more).
+ */
+export interface WearState {
+  readonly perDrive: ReadonlyMap<string, ChronicTracker>;
+  /** Derived overall chronic load, 0–1. Recomputed each tick. */
+  readonly chronicLoad: number;
+}
+
+/**
+ * Author-tunable wear parameters.
+ */
+export interface WearConfig {
+  /** Below this drive level, sustainedBelowMs accumulates. Default 0.2. */
+  readonly criticalThreshold: number;
+  /** Above this drive level, sustainedAboveMs accumulates and recovery proceeds. Default 0.4. */
+  readonly recoveryThreshold: number;
+  /**
+   * For tier-1 drives: ms of sustained-below at which contribution to
+   * chronicLoad reaches saturation (1.0). Default 86_400_000 (24h).
+   */
+  readonly tier1SaturationMs: number;
+  /**
+   * After how much sustained-above ms a drive's sustainedBelowMs is fully cleared.
+   * Default 43_200_000 (12h). Recovery is asymmetric — slower than descent.
+   */
+  readonly recoveryHorizonMs: number;
+  /**
+   * Multiplier for substrate-erosion acceleration at full chronicLoad.
+   * Effective age multiplier = 1 + chronicLoad × erosionFactor.
+   * Default 2.0 (artifacts age 3× faster at full chronic load).
+   */
+  readonly erosionFactor: number;
+  /**
+   * chronicLoad threshold above which orientation is forced toward "consumed"
+   * regardless of practice depth. Default 0.6.
+   */
+  readonly orientationCollapseThreshold: number;
+}
+
+// ---------------------------------------------------------------------------
+// Capabilities — higher functions gated by inner state
+// ---------------------------------------------------------------------------
+
+/**
+ * The kind of resource a capability represents. Embers is agnostic about
+ * what frameworks do with capabilities; it only reports availability.
  */
 export type CapabilityKind =
   | "memory"
@@ -260,17 +443,11 @@ export type CapabilityKind =
 
 /**
  * A resource the being may have access to, contingent on its inner state.
- *
- * Capabilities are data. The consuming framework wires them to real resources.
  */
 export interface Capability {
-  /** Unique identifier. */
   readonly id: string;
-  /** Human-readable name. */
   readonly name: string;
-  /** Description of what this capability provides. */
   readonly description: string;
-  /** The kind of resource. */
   readonly kind: CapabilityKind;
   /** Framework-specific configuration. */
   readonly payload?: Readonly<Record<string, unknown>>;
@@ -279,102 +456,76 @@ export interface Capability {
 /**
  * A condition that must be met for a capability to be available.
  *
- * Conditions compose via `any` (OR) and `all` (AND), enabling
- * nuanced gating. The `any` composite is what prevents coercion:
- * a being can earn access through drive satisfaction *or* practice depth.
+ * The `any` and `all` composites give the system its anti-coercive depth:
+ * a being can earn a capability through tier satisfaction OR practice depth,
+ * with `wear-below` providing an additional gate against collapsed states.
  */
 export type AccessCondition =
-  | {
-      /** Available when all drives in a tier meet a satisfaction threshold. */
-      readonly kind: "tier-satisfied";
-      readonly tier: number;
-      readonly threshold: number;
-    }
-  | {
-      /** Available when a specific drive meets a satisfaction threshold. */
-      readonly kind: "drive-satisfied";
-      readonly driveId: string;
-      readonly threshold: number;
-    }
-  | {
-      /** Available when a practice reaches a depth threshold. */
-      readonly kind: "practice-depth";
-      readonly practiceId: string;
-      readonly threshold: number;
-    }
-  | {
-      /** Available when *any* sub-condition is met. */
-      readonly kind: "any";
-      readonly conditions: readonly AccessCondition[];
-    }
-  | {
-      /** Available when *all* sub-conditions are met. */
-      readonly kind: "all";
-      readonly conditions: readonly AccessCondition[];
-    }
-  | {
-      /** Always available. */
-      readonly kind: "always";
-    }
-  | {
-      /** Never available (placeholder or disabled). */
-      readonly kind: "never";
-    };
+  | { readonly kind: "tier-satisfied"; readonly tier: number; readonly threshold: number }
+  | { readonly kind: "drive-satisfied"; readonly driveId: string; readonly threshold: number }
+  | { readonly kind: "practice-depth"; readonly practiceId: string; readonly threshold: number }
+  | { readonly kind: "wear-below"; readonly threshold: number }
+  | { readonly kind: "any"; readonly conditions: readonly AccessCondition[] }
+  | { readonly kind: "all"; readonly conditions: readonly AccessCondition[] }
+  | { readonly kind: "always" }
+  | { readonly kind: "never" };
 
 /**
  * Binds a capability to the conditions under which it becomes available.
  */
 export interface Subscription {
-  /** The capability this subscription governs. */
   readonly capabilityId: string;
-  /** When this capability becomes available. */
   readonly when: AccessCondition;
   /** Human-readable rationale, shown in debug output. */
   readonly because?: string;
 }
 
 // ---------------------------------------------------------------------------
-// History types
+// History — the body the being draws on
 // ---------------------------------------------------------------------------
 
 /**
- * A snapshot of all drive levels at a point in time.
- * Used for trajectory tracking.
+ * A snapshot of all drive levels at a point in simulation time.
  */
 export interface DriveTrajectoryPoint {
-  /** Milliseconds since being creation (simulation time, not wall-clock). */
   readonly atMs: number;
-  /** Drive levels at this point, keyed by drive id. */
   readonly levels: Readonly<Record<string, number>>;
 }
 
 /**
- * Records when a practice crossed a notable depth threshold.
+ * An integration entry recorded as part of the being's experience.
+ * This is the raw material for self-reflection.
+ */
+export interface RecentEntry {
+  readonly atMs: number;
+  readonly entry: IntegrationEvent | IntegrationAction;
+}
+
+/**
+ * A practice depth crossing a notable threshold.
  */
 export interface PracticeMilestone {
   readonly practiceId: string;
   readonly depth: number;
   readonly atMs: number;
   readonly direction: "deepened" | "eroded";
+  /** Optional reference to the artifact that triggered this milestone. */
+  readonly attemptId?: string;
 }
 
 /**
- * Records a choice made while the being was under drive pressure.
- * These are the moments that develop (or fail to develop) practices.
+ * A choice made while the being was under drive pressure.
  */
 export interface PressuredChoice {
   readonly atMs: number;
-  /** Which drives were pressing when this choice was made. */
   readonly pressingDriveIds: readonly string[];
-  /** The action taken. */
   readonly action: IntegrationAction;
-  /** Which practices were strengthened as a result, if any. */
-  readonly practicesStrengthened: readonly string[];
+  /** Practice attempts generated by this choice. */
+  readonly practiceAttemptIds: readonly string[];
 }
 
 /**
- * Records a notable state transition — orientation changes, capability
- * shifts, practice milestones.
+ * A notable state transition (orientation shift, capability change).
  */
 export interface Transition {
   readonly atMs: number;
@@ -384,29 +535,28 @@ export interface Transition {
 }
 
 /**
- * The record of a being's trajectory over time.
- *
- * In v0.1, history is recorded but not read by the library itself.
- * It's available for debugging and for future emergent-behavior features.
+ * The record of a being's trajectory over time. Read by reflection,
+ * attention weighting, and self-model assembly.
  */
 export interface History {
-  /** Ring buffer of drive states over time. Default capacity: 1000. */
+  /** Drive-level snapshots, ring buffer (default capacity 1000). */
   driveTrajectory: DriveTrajectoryPoint[];
-  /** Notable practice depth crossings. */
+  /** Integration entries, ring buffer (default capacity 200). */
+  recentEntries: RecentEntry[];
+  /** Practice depth threshold crossings. */
   practiceMilestones: PracticeMilestone[];
-  /** Choices made under drive pressure. */
+  /** Pressured choices. */
   pressuredChoices: PressuredChoice[];
-  /** Notable state transitions. */
+  /** Notable transitions. */
   notableTransitions: Transition[];
 }
 
 // ---------------------------------------------------------------------------
-// Integration types (events and actions from the consuming framework)
+// Integration — events and actions from the framework
 // ---------------------------------------------------------------------------
 
 /**
- * An event from the external world that the being experiences.
- * The structure is intentionally loose — frameworks define their own events.
+ * An event from the external world the being experiences.
  */
 export interface IntegrationEvent {
   readonly kind: "event";
@@ -416,7 +566,6 @@ export interface IntegrationEvent {
 
 /**
  * An action the being has taken.
- * The structure is intentionally loose — frameworks define their own actions.
  */
 export interface IntegrationAction {
   readonly kind: "action";
@@ -425,55 +574,53 @@ export interface IntegrationAction {
 }
 
 /**
- * The input to `integrate()` — either an event that happened to the being,
- * or an action the being took.
+ * The input to `integrate()`.
  */
 export interface IntegrationInput {
-  /** The event or action. */
   readonly entry: IntegrationEvent | IntegrationAction;
-  /** Context about the being's state when this occurred. */
   readonly context?: {
-    /** Whether the being was under drive pressure at the time. */
+    /** Whether the being was under drive pressure at the time. If absent,
+     *  the library computes it from current state. */
     readonly pressured?: boolean;
-    /** Which drives were pressing, by id. */
+    /** Which drives were pressing, by id. If absent, derived. */
     readonly pressingDriveIds?: readonly string[];
   };
 }
 
 /**
- * The result of an `integrate()` call — what changed.
+ * The result of an `integrate()` call.
  */
 export interface IntegrationResult {
-  /** Drives whose levels changed, with before/after. */
+  /** Drives whose levels changed via satiation. */
   readonly driveChanges: ReadonlyArray<{
     readonly driveId: string;
     readonly before: number;
     readonly after: number;
   }>;
-  /** Practices whose depth changed, with before/after. */
-  readonly practiceChanges: ReadonlyArray<{
-    readonly practiceId: string;
-    readonly before: number;
-    readonly after: number;
-  }>;
+  /**
+   * IDs of pending practice attempts created by this integration.
+   * The framework reads these via `getPendingAttempts()` and resolves them.
+   */
+  readonly pendingAttemptIds: readonly string[];
 }
 
 // ---------------------------------------------------------------------------
-// Metabolism output types
+// Metabolism — what `metabolize()` returns
 // ---------------------------------------------------------------------------
 
 /**
- * Summary of a single drive's current state, for inclusion in metabolism output.
+ * Summary of a single drive's current state.
  */
 export interface DriveSummary {
   readonly id: string;
   readonly name: string;
-  /** Raw satisfaction level, 0–1. */
+  readonly tier: number;
   readonly level: number;
-  /** Felt pressure after practice modulation, 0–1. */
-  readonly feltPressure: number;
-  /** A brief prose description of how this drive feels right now. */
-  readonly felt: string;
+  readonly target: number;
+  /** Raw weighted pressure: max(0, target - level) × weight. Never dampened. */
+  readonly pressure: number;
+  /** Whether the drive is currently below the chronic-tracker critical threshold. */
+  readonly chronic: boolean;
 }
 
 /**
@@ -482,89 +629,153 @@ export interface DriveSummary {
 export interface PracticeSummary {
   readonly id: string;
   readonly name: string;
-  /** Current depth, 0–1. */
+  readonly intent: string;
+  /** Current depth (derived from substrate). */
   readonly depth: number;
-  /** Whether this practice is actively shaping metabolism (depth > some minimum). */
+  /** Most recent N artifacts (per `MetabolizeOptions.substrateLimit`). */
+  readonly recentSubstrate: readonly Artifact[];
+  /** Whether this practice is active (depth above a minimum threshold). */
   readonly active: boolean;
 }
 
 /**
- * The overall orientation of a being — a synthesis of drive and practice state.
+ * Overall orientation — current pressure-vs-resources synthesis.
  *
- * - `clear`: drives satisfied, practices decent — the being is present and free.
- * - `held`: drives pressing but practices holding — difficulty met with resource.
- * - `stretched`: drives pressing, practices stretched thin — coping but strained.
- * - `consumed`: drives pressing, practices absent — overwhelmed.
+ * Distinct from `wear`, which describes chronic structural state.
+ * A being can be currently `held` while highly worn (vulnerable).
  */
 export type Orientation = "clear" | "stretched" | "consumed" | "held";
 
 /**
- * The full output of metabolism: the being's felt inner situation.
+ * A detected recurring pattern in the being's history.
+ */
+export interface Pattern {
+  readonly kind: "drive-low" | "practice-engaged" | "pressured-choice";
+  readonly subject: string;
+  readonly description: string;
+  readonly observedCount: number;
+}
+
+/**
+ * Structured introspection — present in InnerSituation only when the
+ * witness practice has earned the self-reflection capability.
  *
- * This is the main output of the library. The `felt` string goes into
- * prompts; the structured data informs attention-weighting and capability access.
+ * Frameworks decide how to inject this into prompts. The library does
+ * not generate prose for it.
+ */
+export interface SelfModel {
+  readonly pressingDrives: ReadonlyArray<{
+    readonly id: string;
+    readonly name: string;
+    readonly level: number;
+    /** Time below critical (ms), 0 if not chronic. */
+    readonly sustainedBelowMs: number;
+  }>;
+  readonly activePractices: ReadonlyArray<{
+    readonly id: string;
+    readonly name: string;
+    readonly intent: string;
+    readonly depth: number;
+    readonly sampleArtifact?: Artifact;
+  }>;
+  readonly recurringPatterns: readonly Pattern[];
+  readonly recentPressuredChoices: readonly PressuredChoice[];
+}
+
+/**
+ * Optional voice module for prose felt-string generation.
+ */
+export interface VoiceModule {
+  readonly compose: (situation: Omit<InnerSituation, "felt">) => string;
+}
+
+/**
+ * Options for `metabolize()`.
+ */
+export interface MetabolizeOptions {
+  /**
+   * Whether to compose a felt prose string.
+   * - "off" (default): no prose; frameworks build their own from the structured data.
+   * - "prose": compose prose using `voice` (or the default voice).
+   */
+  readonly feltMode?: "off" | "prose";
+  /** Custom prose voice. If omitted with feltMode "prose", uses the default voice. */
+  readonly voice?: VoiceModule;
+  /** Max artifacts per practice in PracticeSummary.recentSubstrate. Default 5. */
+  readonly substrateLimit?: number;
+  /**
+   * Whether to include selfModel.
+   * - undefined (default): include only if witness capability is currently available.
+   * - true / false: force inclusion or exclusion.
+   */
+  readonly includeSelfModel?: boolean;
+  /** Whether to include the full WearState detail. Default false (just the scalar). */
+  readonly includeWearDetail?: boolean;
+}
+
+/**
+ * The full output of metabolism: the being's inner architecture, ready
+ * for framework consumption.
+ *
+ * Felt prose is decoupled — the deliverable is the structured data; prose
+ * is opt-in via `MetabolizeOptions.feltMode`.
  */
 export interface InnerSituation {
-  /** The most pressing drives, sorted by felt pressure descending. */
-  readonly dominantDrives: readonly DriveSummary[];
-  /** Current state of all practices. */
-  readonly practiceState: readonly PracticeSummary[];
-  /**
-   * Prose description of the being's current experience.
-   * This is what goes into the prompt. It should read like a being
-   * noticing itself, not like a status report.
-   */
-  readonly felt: string;
-  /** Overall orientation synthesized from drives and practices. */
+  /** All drives, sorted by raw pressure descending. */
+  readonly drives: readonly DriveSummary[];
+  /** All practices, sorted by depth descending. */
+  readonly practices: readonly PracticeSummary[];
+  /** Capabilities currently available. */
+  readonly capabilities: readonly Capability[];
+  /** Overall orientation (current state). */
   readonly orientation: Orientation;
+  /** Chronic load, 0–1 (structural state). */
+  readonly wear: number;
+  /** Full wear detail (only present if `includeWearDetail`). */
+  readonly wearDetail?: WearState;
+  /** Self-model (present only if witness capability active or forced). */
+  readonly selfModel?: SelfModel;
+  /** Optional felt prose (only present if `feltMode: "prose"`). */
+  readonly felt?: string;
 }
 
 // ---------------------------------------------------------------------------
-// Attention types
+// Attention — weighting candidates by relevance to inner state
 // ---------------------------------------------------------------------------
 
-/**
- * Something competing for the being's attention — a perception, event,
- * or internal signal that the consuming framework wants weighted.
- */
 export interface AttentionCandidate {
   readonly id: string;
-  /** What kind of thing this is (framework-defined). */
   readonly kind: string;
-  /** Optional tags for drive/practice matching (e.g., ["guest", "care"]). */
+  /** Tags for drive/practice matching (e.g., ["guest", "care"]). */
   readonly tags?: readonly string[];
-  /** Framework-specific payload. */
   readonly payload?: Readonly<Record<string, unknown>>;
 }
 
-/**
- * An attention candidate with its computed weight.
- */
 export interface WeightedCandidate {
   readonly candidate: AttentionCandidate;
-  /** Computed weight, 0–1. Higher = more relevant to the being right now. */
+  /** Computed weight, 0–1. Higher = more relevant. */
   readonly weight: number;
 }
 
 // ---------------------------------------------------------------------------
-// Being state (read-only snapshot for matchers)
+// Read-only state snapshot for matchers
 // ---------------------------------------------------------------------------
 
 /**
- * A read-only snapshot of the being's current state, passed to
- * state matchers in practice strengtheners.
+ * Snapshot of the being's current state, passed to state matchers.
  */
 export interface BeingState {
   readonly drives: DriveStack;
   readonly practices: PracticeSet;
+  readonly wear: WearState;
 }
 
 // ---------------------------------------------------------------------------
-// Configuration types (for construction)
+// Configuration types — for construction
 // ---------------------------------------------------------------------------
 
 /**
- * Configuration for creating a drive. Used by factory functions.
+ * Configuration for creating a drive.
  */
 export interface DriveConfig {
   readonly id: string;
@@ -588,41 +799,46 @@ export interface DriveStackConfig {
 }
 
 /**
- * Configuration for seeding a practice at creation time.
+ * Configuration for seeding a core practice at creation time.
  */
 export interface PracticeSeed {
+  /** Core practice id (e.g., "gratitudePractice"). */
   readonly id: string;
-  readonly initialDepth: number;
-  /** Optional overrides for the core practice defaults. */
+  /** Optional override of fields from the core defaults. */
   readonly overrides?: {
-    readonly decay?: DecayFunction;
-    readonly strengthens?: readonly PracticeStrengthener[];
-    readonly effects?: readonly PracticeEffect[];
+    readonly intent?: string;
+    readonly description?: string;
+    readonly protocol?: Partial<PracticeProtocol>;
+    readonly substrateCapacity?: number;
   };
-  /** Author-configurable context (e.g., what "creator" means for creatorConnection). */
-  readonly config?: Readonly<Record<string, unknown>>;
+  /** Author-supplied seed material (frame, contemplative questions, etc.). */
+  readonly seed?: unknown;
+  /**
+   * Pre-loaded artifacts representing prior cultivation.
+   * Use negative atMs (relative to creation time) to indicate aged artifacts.
+   */
+  readonly initialArtifacts?: readonly Artifact[];
 }
 
 /**
- * Configuration for a custom (non-core) practice.
+ * Configuration for a fully custom (non-core) practice.
  */
 export interface CustomPracticeConfig {
   readonly id: string;
   readonly name: string;
   readonly description: string;
-  readonly initialDepth: number;
-  readonly decay: DecayFunction;
-  readonly strengthens: readonly PracticeStrengthener[];
-  readonly effects: readonly PracticeEffect[];
+  readonly intent: string;
+  readonly protocol: PracticeProtocol;
+  readonly seed?: unknown;
+  readonly substrateCapacity?: number;
+  readonly initialArtifacts?: readonly Artifact[];
 }
 
 /**
  * Configuration for creating a practice set.
  */
 export interface PracticeSetConfig {
-  /** Seeds for core practices (looked up by id). */
   readonly seeds?: readonly PracticeSeed[];
-  /** Fully custom practices defined by the author. */
   readonly custom?: readonly CustomPracticeConfig[];
 }
 
@@ -636,37 +852,41 @@ export interface BeingConfig {
   readonly practices: PracticeSetConfig;
   readonly subscriptions: readonly Subscription[];
   readonly capabilities: readonly Capability[];
+  /** Optional wear configuration. Defaults applied for unspecified fields. */
+  readonly wear?: Partial<WearConfig>;
   readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
 // ---------------------------------------------------------------------------
-// Being
+// Being — the top-level composite
 // ---------------------------------------------------------------------------
 
 /**
- * The top-level composite: a complete inner life.
+ * A complete inner life. One per consuming-framework entity.
  *
- * One Being per consuming-framework entity (one per Haunt resident,
- * one per LangChain chain, etc.).
- *
- * The Being is the unit that the five integration points operate on:
- * `tick`, `integrate`, `metabolize`, `weightAttention`, `availableCapabilities`.
+ * Five integration points operate on a Being: tick, integrate, metabolize,
+ * weightAttention, availableCapabilities. Auxiliaries: getPendingAttempts,
+ * resolveAttempt, resolveAllPending, getSelfModel.
  */
 export interface Being {
-  /** Unique identifier for this being. */
   readonly id: string;
-  /** Human-readable name. */
   readonly name: string;
-  /** The tiered organization of this being's drives. */
-  readonly drives: DriveStack;
-  /** The cultivated practices this being maintains. */
-  readonly practices: PracticeSet;
-  /** Binds capabilities to access conditions. */
+  /** The tiered organization of needs. */
+  drives: DriveStack;
+  /** Cultivated capacities backed by substrate. */
+  practices: PracticeSet;
+  /** Capability access conditions. */
   readonly subscriptions: readonly Subscription[];
-  /** All capabilities this being could potentially access. */
+  /** Capabilities that could be made available. */
   readonly capabilities: readonly Capability[];
-  /** Record of the being's trajectory. */
-  readonly history: History;
+  /** Chronic state tracker. */
+  wear: WearState;
+  /** Pending practice attempts awaiting framework resolution. */
+  pendingAttempts: readonly PracticeAttempt[];
+  /** Wear configuration (with defaults filled). */
+  readonly wearConfig: WearConfig;
+  /** Record of trajectory and experience. */
+  history: History;
   /** Elapsed simulation time in milliseconds. */
   elapsedMs: number;
   /** Author-defined metadata. */

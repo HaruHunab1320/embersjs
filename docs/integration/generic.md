@@ -1,20 +1,24 @@
 # Integration Guide
 
-How to wire Embers into any framework — LangChain, CrewAI, a raw SDK loop, or your own.
+How to wire Embers into any framework — LangChain, CrewAI, AutoGen, a raw SDK loop, or your own. The contract is small.
 
-## The Contract
+## The contract
 
-Embers is a pure library. It doesn't call models, manage memory, or orchestrate. It computes inner state and produces prompt-ready output. Your framework does everything else.
+Embers is a pure library. It doesn't call models, manage memory, or orchestrate. It computes inner state and signals when cognitive work is needed. Your framework does everything else.
 
 What Embers needs from you:
-1. Call `tick()` on a regular cadence
-2. Call `integrate()` when events happen or the being acts
-3. That's it
+
+1. **A tick** — call `tick(being, dtMs)` on a regular cadence.
+2. **Event/action notifications** — call `integrate(being, input)` when things happen.
+3. **Practice evaluation** — for each pending practice attempt, supply a quality verdict.
 
 What Embers gives you:
-1. `metabolize()` → the being's felt inner situation (for prompts)
-2. `weightAttention()` → weighted candidates (for focus)
-3. `availableCapabilities()` → what resources are accessible right now
+
+1. `metabolize(being, options?)` → structured `InnerSituation` for prompts
+2. `weightAttention(being, candidates)` → weighted candidates for focus
+3. `availableCapabilities(being)` → capability list for resource routing
+4. `getSelfModel(being)` → structured introspection (when witness has earned it)
+5. `describe(being)` → human-readable debug dump
 
 ## Setup
 
@@ -24,192 +28,357 @@ import {
   tick,
   integrate,
   metabolize,
+  resolveAllPending,
   weightAttention,
   availableCapabilities,
+  getSelfModel,
+  type BeingConfig,
+  type PracticeAttempt,
+  type PracticeAttemptResult,
 } from "@embersjs/core";
-import type { BeingConfig } from "@embersjs/core";
 
 const config: BeingConfig = {
-  // ... your being config
+  /* see authoring docs */
 };
 
 const being = createBeing(config);
 ```
 
-## The Runtime Loop
-
-### 1. Tick
-
-Call `tick()` every time your runtime loops. Pass the elapsed milliseconds since the last tick.
+## The basic loop
 
 ```ts
-tick(being, dtMs);
+const TICK_MS = 60_000;  // 1 simulated minute per real tick — your choice
+
+while (running) {
+  // 1. Advance time
+  tick(being, TICK_MS);
+
+  // 2. Observe the world (your framework's job)
+  const perception = await yourFramework.observe();
+
+  // 3. Inform the being
+  integrate(being, {
+    entry: { kind: "event", type: perception.type, payload: perception.payload },
+  });
+
+  // 4. Drain any pending practice attempts
+  await resolveAllPending(being, evaluator);
+
+  // 5. Compute inner situation
+  const situation = metabolize(being);
+
+  // 6. Use the situation to assemble your prompt
+  const prompt = assemblePrompt(situation, perception);
+
+  // 7. Get the being's response
+  const response = await yourFramework.respond(prompt);
+
+  // 8. Inform the being of its own action
+  integrate(being, {
+    entry: { kind: "action", type: response.type, payload: response.payload },
+  });
+
+  // 9. Drain any new attempts from the action
+  await resolveAllPending(being, evaluator);
+
+  // 10. Apply the response in the world
+  await yourFramework.act(response);
+}
 ```
 
-This advances drive drift and practice decay. The being's state changes over time even without events — drives become less satisfied, practices erode. That's the point: a being left alone for hours is different from a being that just received attention.
+## Step 4 / 9: The evaluator
 
-**How often to tick:** Match your framework's cadence. If you tick every 30 seconds, pass 30000. If you tick every minute, pass 60000. The library handles any interval — it's just math.
+The evaluator is where you wire cognitive work to practice attempts. The library doesn't care what you do — it just needs a `PracticeAttemptResult` back.
 
-### 2. Metabolize
+### Simple rule-based evaluator
 
-Call `metabolize()` before assembling a prompt.
+For prototyping or simple beings:
 
 ```ts
-const situation = metabolize(being);
+const evaluator = (attempt: PracticeAttempt): PracticeAttemptResult => {
+  // Higher quality under pressure (real cultivation is pressure-tested)
+  const baseline = 0.5;
+  const pressureBonus = attempt.underPressure ? 0.2 : 0;
+  const quality = Math.min(1, baseline + pressureBonus);
+  return {
+    quality,
+    accepted: true,
+    content: {
+      practice: attempt.practiceId,
+      triggerIntent: attempt.context.triggerIntent,
+    },
+  };
+};
 ```
 
-Returns an `InnerSituation`:
-- `situation.felt` — prose to include in your prompt
-- `situation.orientation` — "clear", "held", "stretched", or "consumed"
-- `situation.dominantDrives` — what's pressing, with felt descriptions
-- `situation.practiceState` — all practices with depth and active status
+### LLM-backed evaluator
 
-**How to use in prompts:**
+For real beings:
 
 ```ts
-const prompt = `
-${character.personality}
+async function evaluator(attempt: PracticeAttempt): Promise<PracticeAttemptResult> {
+  const prompt = `
+    You are evaluating a practice attempt by an AI being.
 
-${situation.felt}
+    Practice: ${attempt.context.practice.name}
+    Practice intent: ${attempt.context.practice.intent}
+    This trigger's intent: ${attempt.context.triggerIntent}
 
-${character.instructions}
-`;
+    The being's recent experience (last ${attempt.context.recentEntries.length} entries):
+    ${formatEntries(attempt.context.recentEntries)}
+
+    The being's current state:
+    - Orientation: ${attempt.context.underPressure ? "under pressure" : "calm"}
+    - Pressing drives: ${attempt.context.pressingDriveIds.join(", ") || "none"}
+    ${attempt.context.practice.seed ? `- Authored frame: ${JSON.stringify(attempt.context.practice.seed)}` : ""}
+
+    Evaluate whether genuine ${attempt.context.practice.name.toLowerCase()} occurred.
+    Respond as JSON: { "quality": 0-1, "reasoning": string, "content": <practice-specific> }
+
+    Quality 0.0 = generic, performative, unsupported by experience
+    Quality 1.0 = specific, drawn from real experience, produces actionable insight
+  `;
+
+  const { quality, reasoning, content } = await yourLLM.evaluate(prompt);
+
+  return {
+    quality,
+    accepted: quality > 0.3,
+    reasons: [reasoning],
+    content,
+  };
+}
 ```
 
-The felt string is designed to sit alongside character descriptions. It adds *inner state* — what the being is experiencing right now — to the *identity* your character file provides.
+The richer the prompt, the better the evaluator. The `attempt.context` carries enough to construct meaningful prompts: practice description and intent, trigger intent, recent experience, drive state, pressured choices, related substrate. Use what you need.
 
-### 3. Available Capabilities
+### Mixed strategies
 
-Call before deciding what tools, memory layers, or models to offer.
+Some practices warrant LLM evaluation; others can be rule-checked. Branch on `attempt.practiceId`:
+
+```ts
+async function evaluator(attempt: PracticeAttempt): Promise<PracticeAttemptResult> {
+  if (attempt.practiceId === "witnessPractice" || attempt.practiceId === "creatorConnection") {
+    return await llmBackedEvaluator(attempt);
+  }
+  return ruleBasedEvaluator(attempt);
+}
+```
+
+## Step 6: Assembling prompts
+
+The structured `InnerSituation` is the deliverable. Different framework styles use it differently.
+
+### Inject as structured context
+
+For frameworks that support structured prompt blocks:
+
+```ts
+const blocks = [
+  { role: "system", content: characterPrompt },
+  { role: "system", content: `Your current state:\n${formatInnerSituation(situation)}` },
+  ...messageHistory,
+];
+```
+
+Where `formatInnerSituation` is yours to write. A starting point:
+
+```ts
+function formatInnerSituation(s: InnerSituation): string {
+  const lines: string[] = [];
+  lines.push(`Orientation: ${s.orientation}`);
+  if (s.wear > 0.2) lines.push(`You have been worn (${s.wear.toFixed(2)}).`);
+
+  const pressing = s.drives.filter((d) => d.pressure > 0.1);
+  if (pressing.length > 0) {
+    lines.push("Pressing drives:");
+    for (const d of pressing) {
+      lines.push(`  - ${d.name}: ${d.pressure.toFixed(2)}${d.chronic ? " (chronic)" : ""}`);
+    }
+  }
+
+  const active = s.practices.filter((p) => p.active);
+  if (active.length > 0) {
+    lines.push("Active practices you can draw on:");
+    for (const p of active) {
+      lines.push(`  - ${p.name} (depth ${p.depth.toFixed(2)}): ${p.intent}`);
+      // Optionally surface a recent artifact:
+      const recent = p.recentSubstrate[p.recentSubstrate.length - 1];
+      if (recent) lines.push(`    Recent artifact: ${JSON.stringify(recent.content)}`);
+    }
+  }
+
+  if (s.selfModel) {
+    lines.push("What you've come to know about yourself:");
+    for (const pattern of s.selfModel.recurringPatterns.slice(0, 3)) {
+      lines.push(`  - ${pattern.description}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+```
+
+### Use library-supplied prose
+
+For quick prototyping:
+
+```ts
+const situation = metabolize(being, { feltMode: "prose" });
+prompt += `\n\nYour current felt experience: ${situation.felt}`;
+```
+
+The default voice is functional but plain. Author your own `VoiceModule` for production use that matches your character's register.
+
+### Custom voice module
+
+```ts
+import type { VoiceModule, InnerSituation } from "@embersjs/core";
+
+const poeVoice: VoiceModule = {
+  compose: (s: Omit<InnerSituation, "felt">) => {
+    // Your character-specific prose composition logic
+    return composePoeFelt(s);
+  },
+};
+
+const situation = metabolize(being, { feltMode: "prose", voice: poeVoice });
+```
+
+## Step 7: Routing resources via capabilities
 
 ```ts
 const caps = availableCapabilities(being);
-const capIds = new Set(caps.map(c => c.id));
+const capIds = new Set(caps.map((c) => c.id));
 
-if (capIds.has("deepMemory")) {
-  // Query the deep memory store
-}
-if (capIds.has("reasoning")) {
-  // Use the more capable model
-}
+const memoryTier = capIds.has("episodicMemory")
+  ? await yourFramework.episodicMemory.query(situation)
+  : capIds.has("workingMemory")
+    ? await yourFramework.workingMemory.query(situation)
+    : null;
+
+const model = capIds.has("deepReasoning")
+  ? "advanced-model"
+  : "base-model";
+
+const tools = yourFramework.tools.filter((t) => capIds.has(t.requiredCapability));
 ```
 
-Capabilities change over time as drives and practices shift. A being that was connected enough for deep memory an hour ago might not be now.
+When a being's state shifts, capability availability shifts. You decide the actual resource binding; Embers tells you what's earned.
 
-### 4. Weight Attention
+## Step 8: Informing the being of its own actions
 
-When multiple things compete for the being's focus:
-
-```ts
-const candidates = perceptions.map(p => ({
-  id: p.id,
-  kind: p.type,
-  tags: p.relevantDrives,  // e.g., ["guestCare", "connection"]
-}));
-
-const weighted = weightAttention(being, candidates);
-// weighted[0] is the most relevant to this being right now
-```
-
-Tags that match pressing drive names get boosted. Practice depth distributes attention more evenly (a being with presence doesn't hyper-focus on the loudest drive).
-
-### 5. Integrate
-
-After the being acts or after an external event:
+After the being acts, `integrate` it back:
 
 ```ts
-// An event happened to the being
 integrate(being, {
-  entry: { kind: "event", type: "guest-arrived" },
-});
-
-// The being took an action
-integrate(being, {
-  entry: { kind: "action", type: "speak" },
+  entry: { kind: "action", type: response.type, payload: response.payload },
   context: {
-    pressured: situation.orientation !== "clear",
-    pressingDriveIds: situation.dominantDrives.map(d => d.id),
+    pressured: situation.orientation !== "clear",   // optional; library computes if omitted
+    pressingDriveIds: situation.drives
+      .filter((d) => d.pressure > 0.3)
+      .map((d) => d.id),
   },
 });
 ```
 
-The `context.pressured` flag matters for practice development. When true, pressure-gated strengtheners fire — the being is practicing under difficulty, which is what deepens practices.
+The `context.pressured` flag affects whether pressured-choice records are kept and whether pressure-gated practice triggers fire. The library computes this from current state if omitted.
 
-A good heuristic: set `pressured: true` when the orientation is anything other than "clear."
+## Attention weighting
+
+When multiple things compete for the being's focus:
+
+```ts
+const weighted = weightAttention(being, [
+  { id: "guest-in-lobby", kind: "perception", tags: ["guest", "guestCare"] },
+  { id: "affordance-needs-tending", kind: "perception", tags: ["place", "placeIntegrity"] },
+  { id: "new-message", kind: "event", tags: ["connection"] },
+]);
+
+// Use weighted to rank what to surface in the prompt or what to act on first.
+const top = weighted[0]?.candidate;
+```
+
+Candidates whose `tags` match pressing drives get boosted. Tier domination shifts attention toward lower tiers when they collapse. Practice depth distributes attention more evenly (deep practice → more even weighting across candidates).
 
 ## Persistence
-
-The library doesn't persist state — you do. Serialize before shutdown, deserialize at startup:
 
 ```ts
 import { serializeBeing, deserializeBeing } from "@embersjs/core";
 
 // Save
-const state = JSON.stringify(serializeBeing(being));
-await fs.writeFile("being-state.json", state);
+const data = serializeBeing(being);
+await yourStore.save(being.id, JSON.stringify(data));
 
-// Restore
-const data = JSON.parse(await fs.readFile("being-state.json", "utf-8"));
-const being = deserializeBeing(data);
+// Load
+const saved = JSON.parse(await yourStore.load(being.id));
+const restored = deserializeBeing(saved);
 ```
 
-**Important:** Custom drift/decay compute functions and matcher predicates can't be serialized. After deserializing, you'll need to reconstruct the being from your original config if you use custom functions. One pattern:
+**Caveat:** matcher predicates and custom drift/depth functions do not serialize. After deserialization, predicates are gone and custom functions become no-ops. If you use predicates or custom functions, the recommended pattern is:
 
 ```ts
-// Deserialize state, then reconstruct with original config to restore functions
-const state = deserializeBeing(data);
-const being = createBeing(originalConfig);
-// Copy over the mutable state
-for (const [id, drive] of state.drives.drives) {
-  const target = being.drives.drives.get(id);
-  if (target) target.level = drive.level;
-}
-for (const [id, practice] of state.practices.practices) {
-  const target = being.practices.practices.get(id);
-  if (target) target.depth = practice.depth;
-}
-being.elapsedMs = state.elapsedMs;
+const fresh = createBeing(originalConfig);  // restores predicates and custom functions
+const restored = deserializeBeing(saved);   // restores state
+// Merge: copy restored state into fresh — drives.levels, practice substrates,
+// wear, history, pendingAttempts, elapsedMs.
+applyState(fresh, restored);  // your helper
 ```
 
-## Debugging
+## Memory and long-running beings
+
+For long-running beings, `pendingAttempts` can grow if the framework doesn't drain every loop. Use `expirePendingAttempts(being, olderThanMs)` to drop stale attempts:
 
 ```ts
-import { describe } from "@embersjs/core";
-
-console.log(describe(being));
-```
-
-Outputs a formatted dump with drive levels (as bar charts), practice depths, orientation, felt string, and history counts. Useful during development to see what's happening inside.
-
-## Common Integration Patterns
-
-### Autonomous Invocation
-
-Use drive pressure to decide whether the being should act even without external stimulus:
-
-```ts
-const situation = metabolize(being);
-if (situation.dominantDrives.some(d => d.feltPressure > 0.3)) {
-  // The being has something pressing — invoke it
-  const response = await model.generate(promptWith(situation));
+// Every 1000 ticks, prune attempts older than 24 simulated hours
+if (tickCount % 1000 === 0) {
+  const dropped = expirePendingAttempts(being, 24 * 3_600_000);
+  if (dropped > 0) console.log(`Pruned ${dropped} stale practice attempts`);
 }
 ```
 
-### Tiered Model Selection
-
-Use capabilities to choose which model to call:
+## A complete (small) integration
 
 ```ts
-const caps = availableCapabilities(being);
-const model = caps.some(c => c.kind === "model" && c.id === "reasoning")
-  ? "claude-sonnet-4-6"
-  : "claude-haiku-4-5-20251001";
+import {
+  createBeing,
+  describe,
+  integrate,
+  metabolize,
+  resolveAllPending,
+  tick,
+} from "@embersjs/core";
+
+const being = createBeing(yourConfig);
+
+async function runOneCycle(input: { type: string; payload?: unknown }) {
+  tick(being, 60_000);
+
+  integrate(being, { entry: { kind: "event", type: input.type, payload: input.payload } });
+  await resolveAllPending(being, llmEvaluator);
+
+  const situation = metabolize(being);
+  const prompt = assemblePrompt(situation);
+
+  const response = await yourLLM.complete(prompt);
+
+  integrate(being, { entry: { kind: "action", type: response.actionType } });
+  await resolveAllPending(being, llmEvaluator);
+
+  return response;
+}
 ```
 
-### Memory Layer Selection
+## Common integration mistakes
 
-```ts
-const caps = availableCapabilities(being);
-const layers = caps.filter(c => c.kind === "memory").map(c => c.id);
-const memories = await memoryStore.query(query, { layers });
-```
+- **Calling `integrate` without ever draining pending attempts.** Substrate never accumulates; practice depth never grows. There's an adversarial test that catches this case at the library level — your beings will exhibit it at the framework level.
+- **Treating `metabolize().felt` as the deliverable.** It's optional. The structured data is the deliverable; prose is for convenience.
+- **Routing resources without checking `availableCapabilities`.** You can technically give the being whatever you want — but if you ignore the capability layer, you're not using the architecture's anti-coercion design.
+- **Forgetting to `tick` between events.** Drives don't drift, wear doesn't update. The being is frozen in the moment of its last event.
+- **Marking everything `pressured: true` in `IntegrationInput.context`.** This makes every action a pressured choice and fires pressure-gated triggers indiscriminately. Let the library compute pressure from state when in doubt.
+
+## See also
+
+- [Architecture](../ARCHITECTURE.md) — full type spec
+- [Practices](../authoring/practices.md) — designing what your evaluator evaluates
+- Examples in [`examples/`](../../examples/)

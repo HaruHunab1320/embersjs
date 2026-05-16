@@ -1,62 +1,72 @@
 import { describe, expect, it } from "vitest";
-import { createDriveStack } from "../drives/construct.js";
-import { createPracticeSet } from "../practices/construct.js";
-import { composeEffects } from "../practices/effects.js";
-import { determineOrientation } from "./orientation.js";
-import { computeFeltPressures } from "./pressure.js";
+import { createBeing } from "../being/create.js";
+import { tick } from "../being/lifecycle.js";
+import type { BeingConfig } from "../types.js";
+import { metabolize } from "./metabolize.js";
 
-function orient(driveLevels: Record<string, number>, practiceDepths: Record<string, number>) {
-  const stack = createDriveStack({
-    tierCount: 2,
-    drives: Object.entries(driveLevels).map(([id, level]) => ({
-      id,
-      name: id,
-      description: "",
-      tier: 1,
-      weight: 0.7,
-      initialLevel: level,
-      target: 0.8,
-      drift: { kind: "linear" as const, ratePerHour: -0.1 },
-      satiatedBy: [],
-    })),
-  });
-  const practices = createPracticeSet({
-    seeds: Object.entries(practiceDepths).map(([id, depth]) => ({
-      id,
-      initialDepth: depth,
-    })),
-  });
-  const effects = composeEffects(practices);
-  const pressures = computeFeltPressures(stack, effects);
-  return determineOrientation(pressures, practices, effects);
+const HOUR = 3_600_000;
+
+function buildBeing(initialLevel: number): BeingConfig {
+  return {
+    id: "x",
+    name: "x",
+    drives: {
+      tierCount: 1,
+      drives: [
+        {
+          id: "safety",
+          name: "Safety",
+          description: "t",
+          tier: 1,
+          weight: 1,
+          initialLevel,
+          target: 0.7,
+          drift: { kind: "linear", ratePerHour: 0 },
+          satiatedBy: [],
+        },
+      ],
+    },
+    practices: { seeds: [] },
+    subscriptions: [],
+    capabilities: [],
+  };
 }
 
-describe("determineOrientation", () => {
-  it("returns 'clear' when drives satisfied and practices decent", () => {
-    const result = orient({ a: 0.85, b: 0.9 }, { gratitudePractice: 0.5, integrityPractice: 0.5 });
-    expect(result).toBe("clear");
+describe("orientation", () => {
+  it("clear when drives are satisfied", () => {
+    const being = createBeing(buildBeing(0.8));
+    expect(metabolize(being).orientation).toBe("clear");
   });
 
-  it("returns 'clear' when drives satisfied even with low practice", () => {
-    const result = orient({ a: 0.85, b: 0.9 }, {});
-    expect(result).toBe("clear");
+  it("consumed when drives are unmet and no practice", () => {
+    const being = createBeing(buildBeing(0.05));
+    expect(metabolize(being).orientation).toBe("consumed");
   });
 
-  it("returns 'held' when drives pressing but practices strong", () => {
-    const result = orient(
-      { a: 0.2, b: 0.3 },
-      { gratitudePractice: 0.6, integrityPractice: 0.5, presencePractice: 0.5 },
-    );
-    expect(result).toBe("held");
-  });
+  it("wear above collapse threshold forces orientation to consumed", () => {
+    // Even with high practice, sustained deprivation should override
+    const config = buildBeing(0.05);
+    config.practices = {
+      seeds: [
+        {
+          id: "presencePractice",
+          initialArtifacts: Array.from({ length: 30 }, (_, i) => ({
+            attemptId: `p-${i}`,
+            atMs: 0,
+            quality: 1,
+            underPressure: true,
+            content: {},
+          })),
+        },
+      ],
+    };
+    const being = createBeing(config);
 
-  it("returns 'stretched' when drives pressing and practices moderate", () => {
-    const result = orient({ a: 0.2, b: 0.3 }, { gratitudePractice: 0.25 });
-    expect(result).toBe("stretched");
-  });
+    // Tick enough hours to push wear above 0.6
+    for (let i = 0; i < 30; i++) tick(being, HOUR);
 
-  it("returns 'consumed' when drives pressing and no practices", () => {
-    const result = orient({ a: 0.1, b: 0.1 }, {});
-    expect(result).toBe("consumed");
+    const situation = metabolize(being);
+    expect(being.wear.chronicLoad).toBeGreaterThanOrEqual(0.6);
+    expect(situation.orientation).toBe("consumed");
   });
 });

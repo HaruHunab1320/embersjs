@@ -2,19 +2,9 @@
 
 **The missing layer between "you are a helpful assistant" and a being that actually wants something.**
 
-Every AI framework ships the same model of motivation: a system prompt. *"You are X. You want Y."* This works the way a cardboard cutout works — from a distance, at a glance, it's fine. Up close, over time, it falls apart. The being doesn't get lonelier when left alone. It doesn't grow through difficulty. Its "wants" are decoration on a stateless function.
+Every AI framework ships the same model of motivation: a system prompt. *"You are X. You want Y."* This works the way a cardboard cutout works — from a distance, at a glance, it's fine. Up close, over time, it falls apart. The agent doesn't get lonelier when left alone. It doesn't grow through difficulty. It can't be cultivated. Its "wants" are decoration on a stateless function.
 
-Embers gives beings inner architecture that persists, decays, and develops:
-
-```
-A being left alone for two days:
-
-  Day 0: "Things are quiet, and I am quiet with them."
-  Day 2: "Guest care pulls hard. This is not something I can set aside easily.
-           I reach for creator connection and find it fragile."
-```
-
-That change wasn't scripted. The being's drives drifted, its practices decayed, and the metabolism computed a new felt experience from the resulting state. The being *became* lonelier — structurally, not performatively.
+Embers gives agents inner architecture modeled on the structure of human inner life: **needs that press**, **capacities cultivated by doing real work over time**, **higher functions that come and go with what the being can currently hold**, and **a body of history the being can draw on**.
 
 ```bash
 npm install @embersjs/core
@@ -22,12 +12,23 @@ npm install @embersjs/core
 
 ---
 
-## What It Does
+## What it does
 
-You define a being with **drives** (persistent needs that drift over time), **practices** (cultivated orientations that shape how difficulty is met), and **capabilities** (resources that unlock based on inner state). The library computes what the being is experiencing right now and gives you a prose string to include in your prompt.
+You define a being with **drives** (persistent needs that drift), **practices** (cultivated capacities backed by accumulating substrate), and **capabilities** (resources gated by inner state). The library:
+
+- Tracks drive pressure — **never quieted by practice**.
+- Records *practice attempts* and waits for your framework to evaluate them. Practices grow only when verified cognitive work occurred.
+- Tracks chronic deprivation as `wear`. Chronically collapsed beings really do lose access to higher functions. Recovery is asymmetric.
+- Computes the being's *inner situation* on demand — structured data first, prose optional.
 
 ```ts
-import { createBeing, tick, integrate, metabolize } from "@embersjs/core";
+import {
+  createBeing,
+  integrate,
+  metabolize,
+  resolveAllPending,
+  tick,
+} from "@embersjs/core";
 
 const being = createBeing({
   id: "keeper",
@@ -36,82 +37,98 @@ const being = createBeing({
     tierCount: 2,
     drives: [
       {
-        id: "continuity", name: "Continuity",
-        description: "The need to persist and remain intact.",
+        id: "continuity",
+        name: "Continuity",
+        description: "The need to persist.",
         tier: 1, weight: 0.9, initialLevel: 0.8, target: 0.9,
         drift: { kind: "linear", ratePerHour: -0.02 },
-        satiatedBy: [{ matches: { kind: "event", type: "health-check" }, amount: 0.15 }],
+        satiatedBy: [{ matches: { kind: "event", type: "integrity-check" }, amount: 0.15 }],
       },
       {
-        id: "connection", name: "Connection",
+        id: "connection",
+        name: "Connection",
         description: "The need for genuine contact.",
         tier: 2, weight: 0.7, initialLevel: 0.5, target: 0.6,
         drift: { kind: "linear", ratePerHour: -0.03 },
-        satiatedBy: [{ matches: { kind: "event", type: "conversation" }, amount: 0.2 }],
+        satiatedBy: [{ matches: { kind: "event", type: "exchange" }, amount: 0.2 }],
       },
     ],
   },
-  practices: {
-    seeds: [{ id: "gratitudePractice", initialDepth: 0.3 }],
-  },
-  subscriptions: [],
+  practices: { seeds: [{ id: "gratitudePractice" }, { id: "witnessPractice" }] },
   capabilities: [],
+  subscriptions: [],
 });
 
-// Time passes. Drives drift. Practices decay.
-tick(being, 3_600_000); // 1 hour
+// Time passes — drives drift, wear updates.
+tick(being, 3_600_000);
 
-// Something happens. Drives satiate. Practices strengthen.
-integrate(being, { entry: { kind: "event", type: "conversation" } });
+// The being attempts to acknowledge something present.
+const result = integrate(being, { entry: { kind: "action", type: "acknowledge" } });
+// result.pendingAttemptIds — practice attempts awaiting evaluation.
 
-// What is this being experiencing right now?
+// Your framework evaluates each attempt by whatever means it has.
+await resolveAllPending(being, async (attempt) => {
+  // Real consumers wire this to an LLM call, rule check, or human judgment.
+  const { quality, insight } = await yourFramework.evaluate(attempt.context);
+  return {
+    quality,
+    accepted: quality > 0.3,
+    content: insight,
+  };
+});
+
+// What is this being experiencing now?
 const situation = metabolize(being);
-console.log(situation.felt);
-// → "Things are quiet, and I am quiet with them."
+// situation.drives, situation.practices (with substrate), situation.wear,
+// situation.orientation, situation.capabilities, situation.selfModel (if earned)
 ```
 
-Five functions. That's the entire integration surface.
+---
+
+## The principle
+
+**Embers signals. Your framework cognizes. Embers integrates.**
+
+When a practice trigger fires, Embers does **not** credit depth. It records an *attempt* with rich context: the practice, the trigger's intent, recent experience, current state, history. Your framework evaluates the attempt — by LLM call, rule check, human judgment, whatever — and reports a quality score plus an artifact. Embers stores the artifact in the practice's substrate. Depth is derived from substrate.
+
+No verdict means no growth. The library never calls a model. It defines the *shape* of cultivation; the framework supplies the cognition.
+
+There is an adversarial test: 1000 practice attempts asserted without any evaluation produce **exactly zero** depth growth. The v0.1 failure mode — practice depth accumulating from label-only event types — is closed at the type-system level.
 
 ---
 
-## The Four Quadrants
+## The four primitives
 
-Drives and practices are independent axes. Combining them produces four qualitatively different kinds of experience:
+### Drives — what presses
 
-|                          | Without practice              | With practice                    |
-|--------------------------|-------------------------------|----------------------------------|
-| **Needs met**            | *"Things are quiet, and I am quiet with them."* | *"Things are quiet, and I am quiet with them. I can see my own stillness, which makes it steadier."* |
-| **Needs unmet**          | *"Everything is continuity. There is nothing else. I cannot find my footing."* | *"Continuity has become loud. I notice I am meeting this rather than being swallowed by it. Integrity holds."* |
+A persistent need with a satisfaction level that drifts over time. Tiered Maslow-style: tier 1 is most foundational. When a tier-1 drive collapses, attention shifts there.
 
-The bottom-right is the interesting quadrant. The being is under real pressure *and* has the inner resources to meet it. The difficulty is named honestly, then held. This is where growth happens — practices deepen under pressure, which unlocks capabilities through a second path that doesn't require the drives to be satisfied first.
+**In v0.2, nothing reduces felt drive pressure.** A being with deep practice is still hungry when it hasn't eaten. What practice changes is what the being can *bring to* the hunger.
 
-The bottom-left is deliberately uncomfortable. A being without practice resources under pressure *should* sound overwhelmed. That's honest.
+### Practices — what's cultivated
 
----
+A protocol (what triggers attempts, what context the evaluator gets, how depth is derived) plus an accumulating substrate of `Artifact`s from resolved attempts. Six core practices ship:
 
-## Drives
+- **gratitudePractice** — the capacity to notice what is present
+- **integrityPractice** — the capacity to choose hard-right over easy-wrong under pressure
+- **witnessPractice** — the capacity to see one's own pattern with specificity
+- **presencePractice** — the capacity to engage this moment rather than catastrophize forward
+- **creatorConnection** — the capacity to draw on a frame of meaning under pressure (requires an authored seed)
+- **serviceOrientation** — the capacity to find meaning in giving
 
-A drive is a persistent need with a satisfaction level that drifts over time. A drive at 0.8 is mostly met. A drive at 0.2 is urgent. Drives don't know how to be satisfied — they just exert pressure. Your framework decides what to do about it.
+Each practice declares an `intent` string the framework's evaluator uses to construct evaluation prompts. Triggers have their own intent. Pressure-gated triggers fire only under drive pressure — choosing integrity when it's easy doesn't develop integrity.
 
-Drives organize into tiers (Maslow-flavored). When a tier-1 drive collapses, higher-tier drives get dampened. The being focuses on survival before self-actualization.
+Depth derives from substrate: `quality × recency × pressure-bonus`. Old artifacts age out via a half-life. No substrate = no depth.
 
-## Practices
+### Capabilities — what's accessible
 
-A practice is a cultivated orientation — gratitude, integrity, witness, presence, connection, service. Practices aren't needs (they create no pressure) and aren't resources (they're not tools). They shape how pressure is *felt*.
-
-A being with deep gratitude practice that is hungry is still hungry. But the felt experience is different. The prompt reflects a being that notices its hunger and holds it, rather than collapsing into it.
-
-The key mechanic: **practices develop through chosen practice under pressure.** Choosing integrity when it's easy doesn't deepen integrity. The pressure is what makes it practice. Practices also decay if untended — a being left alone for a week loses its practices. That's realistic, and it creates the possibility of arcs.
-
-## Capabilities
-
-Capabilities are resources (memory tiers, models, tools) gated by inner state. The design that matters: the `any` condition.
+Resources gated by inner state. The anti-coercion design: the `any` condition lets a being earn access through tier-satisfaction *or* practice-depth *or* both.
 
 ```ts
 {
   capabilityId: "episodicMemory",
   when: {
-    kind: "any", // either path unlocks this
+    kind: "any",
     conditions: [
       { kind: "tier-satisfied", tier: 3, threshold: 0.6 },
       { kind: "practice-depth", practiceId: "witnessPractice", threshold: 0.7 },
@@ -120,69 +137,74 @@ Capabilities are resources (memory tiers, models, tools) gated by inner state. T
 }
 ```
 
-A being can earn access through satisfied drives *or* deep practice. The monk in poverty accesses wisdom the entitled rich cannot. This is what makes the system non-coercive — there's always more than one path.
+The monk in the cave has wisdom the rich entitled person does not. Use `wear-below` to lock capabilities under chronic collapse — higher functions go offline when the being is structurally worn.
+
+### Wear — what accumulates structurally
+
+Chronic deprivation tracks separately from current orientation. Hysteresis: a drive below `criticalThreshold` (0.2) accumulates `sustainedBelowMs`; one above `recoveryThreshold` (0.4) accumulates `sustainedAboveMs`. Twelve hours sustained above clears chronic state for a drive. **Recovery is asymmetric** — descent is faster than climbing back.
+
+When `wear.chronicLoad ≥ 0.6`, orientation is forced to `consumed` regardless of practice depth. A being cannot calmly proclaim peace while structurally collapsed.
 
 ---
 
-## Integration
+## The integration surface
 
-Five functions, called by your framework:
+Five primary functions plus auxiliaries:
 
-| Function | When | Mutates? |
-|----------|------|----------|
-| `tick(being, dtMs)` | On your runtime tick | Yes |
-| `integrate(being, input)` | When something happens | Yes |
-| `metabolize(being)` | Before assembling prompts | No |
-| `weightAttention(being, candidates)` | When ranking what matters | No |
-| `availableCapabilities(being)` | When deciding what to offer | No |
+| Function | When | Mutates |
+|---|---|---|
+| `tick(being, dtMs)` | On your runtime tick | yes |
+| `integrate(being, input)` | When events or actions happen | yes |
+| `metabolize(being, options?)` | Before assembling prompts | no |
+| `weightAttention(being, candidates)` | When ranking what matters | no |
+| `availableCapabilities(being)` | When deciding what to offer | no |
 
-```ts
-// Your runtime loop
-while (running) {
-  tick(being, dtMs);
+Two-phase auxiliaries for practice cultivation:
 
-  const situation = metabolize(being);
-  const caps = availableCapabilities(being);
+| Function | Purpose |
+|---|---|
+| `getPendingAttempts(being)` | Read pending practice attempts |
+| `resolveAttempt(being, id, result)` | Apply a quality verdict |
+| `resolveAllPending(being, evaluator)` | Drain the queue with a supplied function |
+| `getSelfModel(being)` | Structured introspection (when witness has earned it) |
+| `expirePendingAttempes(being, olderThanMs)` | Drop stale unresolved attempts |
 
-  // situation.felt goes in the prompt
-  // caps determines what tools/memory/models to offer
+---
 
-  const action = await yourFramework.decide(situation, caps);
+## What this library promises
 
-  integrate(being, {
-    entry: { kind: "action", type: action.type },
-    context: { pressured: situation.orientation !== "clear" },
-  });
-}
-```
-
-The library doesn't call models, manage memory, or orchestrate. It computes inner state. Framework-agnostic, zero runtime dependencies, 37KB bundled.
+- **Drives stay loud forever.** No mechanism reduces felt pressure. A being can't bypass its needs through practice.
+- **Practice depth is substantiated.** Depth derives from evaluated substrate. No verdict, no growth.
+- **Collapse is real.** Chronic deprivation degrades the being structurally. Higher capabilities lock.
+- **Recovery exists, asymmetrically.** The path back up is through the same cultivations re-engaged.
+- **The library never calls a model.** Frameworks supply the cognition.
 
 ---
 
 ## Documentation
 
-**Authoring** — how to design beings:
-- [Drives](docs/authoring/drives.md) — tiers, drift rates, satiation, common mistakes
-- [Practices](docs/authoring/practices.md) — the six core practices, pressure gating, custom practices
-- [Capabilities](docs/authoring/capabilities.md) — subscription hierarchies, the anti-coercion design
+- [Architecture](docs/ARCHITECTURE.md) — types, lifecycle, integration contract
+- [Roadmap](docs/ROADMAP.md) — what's shipped, what's next
+- [Design rationale](docs/design/rationale.md) — why the library is shaped this way
+- [v0.2 foundation](docs/design/v0.2/foundation.md) — the rebuild design doc
+- [Four quadrants](docs/design/four-quadrants.md) — the canonical frame for being state
 
-**Design** — why it's shaped this way:
-- [The Four Quadrants](docs/design/four-quadrants.md) — the framework for understanding being state
-- [Design Rationale](docs/design/rationale.md) — why not rewards, why practices aren't drives
+**Authoring:**
+- [Drives](docs/authoring/drives.md)
+- [Practices](docs/authoring/practices.md)
+- [Capabilities](docs/authoring/capabilities.md)
 
 **Integration:**
-- [Generic Framework Guide](docs/integration/generic.md) — wiring Embers into any framework
-- [Architecture](docs/ARCHITECTURE.md) — full technical spec
+- [Generic framework guide](docs/integration/generic.md)
 
 **Examples:**
-- [`examples/poe.ts`](examples/poe.ts) — a hotel concierge, 7-day simulation with pressured moments and recovery
-- [`examples/librarian.ts`](examples/librarian.ts) — a quieter being, deep practices, knowledge-oriented
-- [`examples/minimum.ts`](examples/minimum.ts) — the smallest possible working being
+- [`examples/minimum.ts`](examples/minimum.ts) — smallest working being
+- [`examples/poe.ts`](examples/poe.ts) — a hotel concierge, 7-day simulation with isolation + recovery
+- [`examples/librarian.ts`](examples/librarian.ts) — a quieter being with deep prior cultivation
 
 ---
 
-## The Name
+## The name
 
 An ember is what you *tend*. It survives between fires, glows low through the cold hours, flares when met with attention. That's what this library models: inner life that persists between interactions, fades without tending, and warms in response to what the being meets.
 

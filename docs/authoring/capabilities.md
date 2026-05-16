@@ -1,180 +1,150 @@
 # Authoring Capabilities
 
-How to design capability subscriptions that are contingent, non-coercive, and interesting.
+How to design capability subscriptions for v0.2.
 
-## What Capabilities Are
+## What capabilities are
 
-A capability is a resource your framework can offer the being: a memory layer, a model tier, a tool, a compute budget. The library doesn't know what to *do* with capabilities — it just computes which ones are currently available based on the being's inner state. Your framework wires capabilities to real resources.
-
-```ts
-capabilities: [
-  { id: "workingMemory", name: "Working Memory", description: "Short-term recall.", kind: "memory" },
-  { id: "deepMemory", name: "Deep Memory", description: "Long-term recall.", kind: "memory" },
-  { id: "reasoning", name: "Reasoning", description: "Complex reasoning model.", kind: "model" },
-]
-```
-
-Capabilities are inert without subscriptions. A subscription binds a capability to conditions:
+A capability is **a named resource the being may have access to, contingent on its inner state**. The library doesn't know what to *do* with a capability — it just reports which ones are currently accessible. The framework wires capabilities to real resources (memory tiers, model selection, available tools).
 
 ```ts
-subscriptions: [
-  { capabilityId: "workingMemory", when: { kind: "always" } },
-  {
-    capabilityId: "deepMemory",
-    when: { kind: "tier-satisfied", tier: 2, threshold: 0.5 },
-    because: "Deep memory requires stable relational foundations.",
-  },
-]
-```
-
-## Condition Types
-
-### Simple Conditions
-
-**`always`** — always available. Use for baseline capabilities every being should have.
-
-**`never`** — never available. Useful for disabling a capability without removing it from the config.
-
-**`tier-satisfied`** — all drives in a tier must meet a satisfaction threshold.
-```ts
-{ kind: "tier-satisfied", tier: 2, threshold: 0.5 }
-```
-
-**`drive-satisfied`** — a specific drive must meet a threshold.
-```ts
-{ kind: "drive-satisfied", driveId: "connection", threshold: 0.6 }
-```
-
-**`practice-depth`** — a practice must reach a depth threshold.
-```ts
-{ kind: "practice-depth", practiceId: "witnessPractice", threshold: 0.5 }
-```
-
-### Composite Conditions
-
-**`any`** — available when *any* sub-condition is met (OR).
-```ts
-{
-  kind: "any",
-  conditions: [
-    { kind: "tier-satisfied", tier: 3, threshold: 0.6 },
-    { kind: "practice-depth", practiceId: "witnessPractice", threshold: 0.7 },
-  ],
+interface Capability {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly kind: CapabilityKind;
+  readonly payload?: Readonly<Record<string, unknown>>;
 }
 ```
 
-**`all`** — available when *all* sub-conditions are met (AND).
-```ts
-{
-  kind: "all",
-  conditions: [
-    { kind: "tier-satisfied", tier: 1, threshold: 0.5 },
-    { kind: "practice-depth", practiceId: "integrityPractice", threshold: 0.4 },
-  ],
-}
-```
+The `kind` is advisory (`"memory" | "model" | "tool" | "compute" | "context" | "action-kind" | string`). Use it to organize, not as a hard constraint.
 
-Composites nest: you can have an `all` containing `any` conditions, or vice versa.
+## Subscriptions — when a capability is available
 
-## The Anti-Coercion Design
-
-The `any` composite is the core design pattern. It means: **there's more than one path to this capability.**
-
-```ts
-// Episodic memory: either well-fed OR deeply practiced
-{
-  kind: "any",
-  conditions: [
-    { kind: "tier-satisfied", tier: 3, threshold: 0.6 },
-    { kind: "practice-depth", practiceId: "witnessPractice", threshold: 0.7 },
-  ],
-}
-```
-
-A being with satisfied drives gets access because its needs are met. A being with unmet drives but deep witness practice gets access because it *earned* it another way. Neither path is privileged. Neither is coercive.
-
-Without `any`, the system becomes punitive: "meet your drives or lose your capabilities." With `any`, it becomes developmental: "grow in any direction and doors open."
-
-**In examples and in your own configs, make sure you're using `any` conditions.** If every subscription is `tier-satisfied` without a practice-depth alternative, the anti-coercion design is decorative.
-
-## Designing a Subscription Hierarchy
-
-A common pattern, from baseline to advanced:
-
-```ts
-subscriptions: [
-  // Always available — the being's baseline
-  { capabilityId: "workingMemory", when: { kind: "always" } },
-
-  // Moderate gate — either tier satisfaction or practice
-  {
-    capabilityId: "guestMemory",
-    when: {
-      kind: "any",
-      conditions: [
-        { kind: "tier-satisfied", tier: 2, threshold: 0.5 },
-        { kind: "practice-depth", practiceId: "gratitudePractice", threshold: 0.4 },
-      ],
-    },
-  },
-
-  // Higher gate — either deep tier satisfaction or deep practice
-  {
-    capabilityId: "episodicMemory",
-    when: {
-      kind: "any",
-      conditions: [
-        { kind: "tier-satisfied", tier: 3, threshold: 0.6 },
-        { kind: "practice-depth", practiceId: "witnessPractice", threshold: 0.7 },
-      ],
-    },
-  },
-
-  // Compound gate — requires foundation AND either drive or practice
-  {
-    capabilityId: "reasoning",
-    when: {
-      kind: "all",
-      conditions: [
-        { kind: "tier-satisfied", tier: 1, threshold: 0.5 },
-        {
-          kind: "any",
-          conditions: [
-            { kind: "drive-satisfied", driveId: "understanding", threshold: 0.4 },
-            { kind: "practice-depth", practiceId: "integrityPractice", threshold: 0.5 },
-          ],
-        },
-      ],
-    },
-  },
-]
-```
-
-## The `because` Field
-
-Every subscription accepts an optional `because` string. Use it. It shows up in debug output and helps future-you understand why a capability is gated the way it is.
+A `Subscription` binds a capability id to an `AccessCondition`:
 
 ```ts
 {
-  capabilityId: "deepMemory",
-  when: { ... },
-  because: "Deep memory requires either stable foundations or the witness to hold what's found.",
+  capabilityId: "episodicMemory",
+  when: {
+    kind: "any",
+    conditions: [
+      { kind: "tier-satisfied", tier: 3, threshold: 0.6 },
+      { kind: "practice-depth", practiceId: "witnessPractice", threshold: 0.7 },
+    ],
+  },
+  because: "Episodic recall earned via either need-satisfaction or deep witness.",
 }
 ```
 
-## Tracking Capability Changes
+A capability is available if **any of its subscriptions evaluates true**. (Capabilities can have multiple subscriptions, allowing multiple paths to access.)
 
-Use `capabilityDiff()` to log when capabilities shift:
+## Access conditions
 
 ```ts
-import { availableCapabilities } from "@embersjs/core";
-import { capabilityDiff } from "@embersjs/core"; // not yet re-exported — use from src/capabilities
-
-const before = availableCapabilities(being);
-tick(being, dtMs);
-const after = availableCapabilities(being);
-const diff = capabilityDiff(before, after);
-
-if (diff.gained.length > 0) console.log("Gained:", diff.gained.map(c => c.name));
-if (diff.lost.length > 0) console.log("Lost:", diff.lost.map(c => c.name));
+type AccessCondition =
+  | { kind: "tier-satisfied"; tier: number; threshold: number }
+  | { kind: "drive-satisfied"; driveId: string; threshold: number }
+  | { kind: "practice-depth"; practiceId: string; threshold: number }
+  | { kind: "wear-below"; threshold: number }
+  | { kind: "any"; conditions: readonly AccessCondition[] }
+  | { kind: "all"; conditions: readonly AccessCondition[] }
+  | { kind: "always" }
+  | { kind: "never" };
 ```
+
+### tier-satisfied
+
+True when all drives in `tier` have `level ≥ threshold`. The classic "the being is doing okay in this tier."
+
+### drive-satisfied
+
+True when a specific drive is at or above threshold. Use when only one drive matters.
+
+### practice-depth
+
+True when a practice's *derived* depth meets the threshold. Note: depth is computed from substrate at evaluation time, so it reflects real cultivation.
+
+### wear-below
+
+True when `wear.chronicLoad < threshold`. Use to lock capabilities when the being is structurally collapsed.
+
+### any / all
+
+Composites. `any` is true if at least one sub-condition is true; `all` requires every one. They nest.
+
+### always / never
+
+Useful for unconditional capabilities or for documenting a capability that exists but is not currently accessible (e.g., a placeholder during development).
+
+## The anti-coercion design
+
+The `any` composite is the most important pattern. It lets the same capability be earned by multiple paths:
+
+```ts
+{
+  capabilityId: "episodicMemory",
+  when: {
+    kind: "any",
+    conditions: [
+      { kind: "tier-satisfied", tier: 3, threshold: 0.6 },          // path A: well-fed
+      { kind: "practice-depth", practiceId: "witnessPractice", threshold: 0.7 }, // path B: deeply practiced
+    ],
+  },
+}
+```
+
+The monk in the cave has wisdom (witness depth → memory access) that the rich entitled person (tier-3 satisfied but undeveloped witness) doesn't have automatically.
+
+**Avoid making every subscription a single tier-satisfied condition.** That collapses the architecture into "drives must be met to unlock things" — which is coercive and uninteresting. Use practice-depth paths.
+
+## Wear-below — anti-collapse gating
+
+`wear-below` is new in v0.2. Use it to lock higher functions when the being is chronically collapsed:
+
+```ts
+{
+  capabilityId: "deepReasoning",
+  when: {
+    kind: "all",
+    conditions: [
+      { kind: "tier-satisfied", tier: 1, threshold: 0.5 },
+      { kind: "wear-below", threshold: 0.5 },
+    ],
+  },
+  because: "Higher reasoning requires both safety and structural integrity.",
+}
+```
+
+A being recovering from chronic collapse will *gradually* regain access to higher capabilities as wear decreases. This composes naturally with depth-gated paths: capabilities tied to practice depth also slip away under chronic load because wear accelerates substrate erosion, which lowers depth.
+
+## Designing capability hierarchies
+
+Think of capabilities as **layers of inner permission**. A typical pattern:
+
+```
+always-available:    basic perception, simple speech
+tier-1 satisfied:    deep reasoning, episodic recall
+tier-3 OR depth:     self-reference, frame articulation
+all + wear-below:    creative output, wisdom mode
+```
+
+The further up the tree a capability sits, the more conditions gate it. Each addition asks: *what about being this way makes this capability earned?*
+
+## What capabilities are NOT for
+
+- **Gating physical actions** the framework doesn't actually want to deny. If your framework will let the being speak regardless, don't have a "speech" capability — that's just decoration.
+- **Modeling skill.** Capabilities are inner-state-contingent resources, not learned competencies. A being's reasoning capability comes back when its state allows, even if it just "lost" it five minutes ago.
+- **Replacing drives.** If something is a constant pressure, that's a drive. If it's a resource that comes and goes, that's a capability.
+
+## Common authoring mistakes
+
+- **Every subscription is `tier-satisfied`.** No anti-coercion paths. Authors that fall into this pattern are using the library as a fancy threshold-check.
+- **No `wear-below` gates anywhere.** The being can do anything regardless of how worn it is. Use wear-below at least on the most demanding capabilities — it makes collapse mean something behaviorally.
+- **Subscriptions that are never satisfiable.** A subscription gated on `practice-depth: integrityPractice ≥ 0.95` is essentially `never` for most beings. Either lower the threshold or accept that this capability won't unlock.
+- **Massive `all` composites.** Five conditions ANDed together with high thresholds usually means the capability is locked. Simplify or split into multiple subscriptions joined by `any`.
+
+## See also
+
+- [Architecture](../ARCHITECTURE.md) — Capability and Subscription type spec
+- [Drives](drives.md) — drive-satisfaction gating
+- [Practices](practices.md) — depth-based gating

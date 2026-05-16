@@ -1,442 +1,347 @@
-# Architecture
+# Architecture (v0.2)
 
-Authoritative technical spec for the Embers library. Defines primitives, interfaces, lifecycle, and integration contracts.
+The technical spec for `@embersjs/core`. Types, lifecycle, integration contract. Read alongside [`docs/design/v0.2/foundation.md`](design/v0.2/foundation.md), which captures *why* the library is shaped this way.
 
-Read this alongside `README.md`. The README establishes *why*; this doc establishes *what and how*.
+If anything in code contradicts this document, the code wins and this document should be updated.
 
-## Structural Overview
-
-The library is organized around five core primitives and the functions that operate on them.
+## Structural overview
 
 ```
-┌─────────────────────────────────────────────┐
-│                   BEING                      │
-│  The container for a complete inner life     │
-└──────────────────┬──────────────────────────┘
-                   │
-        ┌──────────┼──────────┬──────────────┐
-        ▼          ▼          ▼              ▼
-   DriveStack   PracticeSet  Subscriptions  History
-   (needs)      (orientations) (contingent   (record of
-                              access)        becoming)
+┌───────────────────────────────────────────────────────────┐
+│                          BEING                             │
+└─────┬──────────┬─────────┬──────────┬──────────┬──────────┘
+      ▼          ▼         ▼          ▼          ▼
+   Drives    Practices  Subscriptions History    Wear
+   (needs    (cultivated  (capabilities (the body  (chronic
+   press)    capacities   gated by      drawn on)  state +
+              backed by   inner state)             collapse)
+              substrate)
 ```
 
-**Being** is the top-level composite. Every operation in the library takes a Being as input.
+Five primitives, each with a clear role:
 
-**DriveStack** holds the tiered organization of drives. Tiered means tier 1 is most foundational, tier N is most self-actualizing. Drives within the same tier compete by weight; drives across tiers interact by domination (but are modulated by practices).
+- **Drives** press constantly. Never quieted by anything in the library.
+- **Practices** are protocols + accumulating substrate. Depth is derived from substrate, not stored.
+- **Subscriptions** gate capabilities by inner state. Two paths in (need-met or depth-earned), plus `wear-below`.
+- **History** is the body the being draws on. Read by reflection, attention weighting, and self-model assembly.
+- **Wear** tracks chronic state. Accelerates substrate erosion; above a threshold, forces orientation to `consumed`.
 
-**PracticeSet** holds the being's cultivated practices. Each practice has depth (0-1), decay rate, and strengtheners (what kinds of events develop it).
+## Core types
 
-**Subscriptions** bind capabilities to access conditions. Access can be through drive satisfaction *or* practice depth *or* combinations.
+All types live in [`src/types.ts`](../src/types.ts). They are the library's public contract. Changes are breaking.
 
-**History** records the being's trajectory — which drives have been pressing, which practices have developed, which choices have been made under pressure. Used for emergent-behavior modes and debugging.
-
-## Core Types
-
-All types live in `src/types.ts`. Keep them stable — changes are breaking for every consumer.
-
-### Being
-
-```ts
-interface Being {
-  id: string;
-  name: string;
-  drives: DriveStack;
-  practices: PracticeSet;
-  subscriptions: Subscription[];
-  history: History;
-  metadata: Record<string, unknown>;
-}
-```
-
-A Being is the unit of inner life. One Being per agent. In Haunt, one Being per resident.
-
-### Drive
+### Drives
 
 ```ts
 interface Drive {
-  id: string;
-  name: string;
-  description: string;                // used in prompts
-  tier: number;                       // 1 = most foundational
-  weight: number;                     // within-tier importance, 0-1
-  level: number;                      // current satisfaction, 0-1 (1 = fully met)
-  target: number;                     // homeostatic set point, 0-1
-  drift: DriftFunction;               // how level changes over time
-  satiatedBy: SatiationBinding[];     // what events/actions satisfy this drive
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly tier: number;       // 1 = most foundational
+  readonly weight: number;     // within-tier importance, 0–1
+  level: number;               // current satisfaction, 0–1 (1 = met)
+  readonly target: number;     // homeostatic set point
+  readonly drift: DriftFunction;
+  readonly satiatedBy: readonly SatiationBinding[];
 }
 
 type DriftFunction =
-  | { kind: "linear"; ratePerHour: number }   // negative = drifts down (becomes less satisfied)
+  | { kind: "linear"; ratePerHour: number }
   | { kind: "exponential"; halfLifeHours: number }
   | { kind: "custom"; compute: (current: number, dtMs: number) => number };
 
-interface SatiationBinding {
-  matches: EventMatcher | ActionMatcher;
-  amount: number;                     // how much this satiates, 0-1
-}
-```
-
-A drive's `level` represents *satisfaction*, not *need*. A `level` of 1 means fully met; 0 means dire. This is the inverse of some frameworks — using satisfaction lets the library compute pressure as `(target - level)` naturally.
-
-Drift is usually negative (drives become less satisfied over time, requiring tending). Some drives may drift upward briefly after an event — e.g., an `expression` drive might get a post-activity boost and then decay back.
-
-### DriveStack
-
-```ts
 interface DriveStack {
-  drives: Map<string, Drive>;
-  tierCount: number;
-  dominationRules: DominationRules;
-}
-
-interface DominationRules {
-  threshold: number;              // below this satisfaction, a drive "dominates"
-  dampening: number;              // 0-1; how much dominated tiers are dampened
-  // If a tier-1 drive is below threshold, tiers 2+ have their felt weight
-  // multiplied by (1 - dampening). Practices can modify this — see Metabolism.
+  readonly drives: Map<string, Drive>;
+  readonly tierCount: number;
+  readonly dominationRules: {
+    readonly threshold: number;          // default 0.3
+    readonly attentionDampening: number; // default 0.7 — affects ATTENTION only
+  };
 }
 ```
 
-Default `DominationRules`: `threshold: 0.3, dampening: 0.7`. Meaning: if any tier-1 drive's level falls below 0.3, higher-tier drives have their felt weight cut by 70%. This reflects Maslow's core insight about lower-tier urgency while remaining gentle enough to not create total domination.
+**Pressure** is computed as `max(0, target - level) * weight`. It is **never** reduced by practices or other modulations. The `attentionDampening` in `DominationRules` applies in `weightAttention()` only — when a lower tier is dominating, candidates relevant to higher tiers receive a reduced boost.
 
-### Practice
+### Practices
 
 ```ts
 interface Practice {
-  id: string;
-  name: string;
-  description: string;
-  depth: number;                      // 0-1, how developed
-  decay: DecayFunction;               // how quickly it erodes if untended
-  strengthens: PracticeStrengthener[];
-  effects: PracticeEffect[];          // how this practice modifies metabolism
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  /** What cultivation this practice represents. Used by evaluators. */
+  readonly intent: string;
+  readonly protocol: PracticeProtocol;
+  substrate: PracticeSubstrate;
+  /** Optional author seed — e.g., creator-connection's frame + questions. */
+  readonly seed?: unknown;
 }
 
-interface PracticeStrengthener {
-  matches: EventMatcher | ActionMatcher | StateMatcher;
-  amount: number;                     // how much depth this adds, 0-1
-  requiresPressure: boolean;          // true = only strengthens under drive pressure
-                                      // (choosing integrity when easy doesn't develop it)
+interface PracticeProtocol {
+  readonly triggers: readonly PracticeTrigger[];
+  readonly contextWindow: ContextWindowSpec;
+  readonly depthFunction?: DepthFunction;  // defaults to recency × quality × pressure-bonus
+  readonly artifactMaxAgeMs?: number;      // hard eviction cap, default 30d
 }
 
-type PracticeEffect =
-  | { kind: "dampen-drive-pressure"; driveIds: string[]; factor: number }
-  | { kind: "extend-time-horizon"; factor: number }
-  | { kind: "enable-witness"; meta: true }
-  | { kind: "shift-orientation"; toward: "clear" | "held" | "stretched" };
+interface PracticeTrigger {
+  readonly matches: EventMatcher | ActionMatcher | StateMatcher;
+  readonly requiresPressure: boolean;
+  readonly intent: string;       // what cognitive work this attempt represents
+  readonly maxContribution: number;  // max depth contribution per artifact
+}
+
+interface PracticeSubstrate {
+  readonly artifacts: readonly Artifact[];
+  readonly capacity: number;     // ring buffer
+}
+
+interface Artifact {
+  readonly attemptId: string;
+  readonly atMs: number;
+  readonly quality: number;
+  readonly underPressure: boolean;
+  readonly content: unknown;      // framework-supplied, opaque to Embers
+  readonly reasons?: readonly string[];
+}
 ```
 
-Practices are the most subtle primitive. Their key properties:
+**There is no `depth` field on Practice.** Depth is derived from substrate by the protocol's `depthFunction` (or the default). Reading depth is `computeDepth(practice, nowMs)` or `practiceDepth(set, id, nowMs)`.
 
-**Practices develop through chosen practice under pressure, not passive accumulation.** The `requiresPressure: true` flag on strengtheners enforces this — a being whose integrity is never tested doesn't develop integrityPractice depth, no matter how many integrity-aligned actions it takes.
+**There is no `effects` field on Practice.** Practices influence the being through (a) substrate retrieval surfaced in metabolize, and (b) depth-gated capabilities. They do not have generic effects.
 
-**Practices decay if untended.** A being that stops practicing loses depth. This is realistic and creates interesting arcs — beings can fall and recover.
-
-**Practices modify metabolism, not drives directly.** A practice never changes a drive's level. Level = 0.2 is level = 0.2. What practices change is how that level is *felt* and *weighted* in the prompt and attention functions. This distinction matters: we're not designing a system where spiritual practice makes hunger go away. We're designing one where practice changes how hunger is met.
-
-### The Core Practices
-
-The library ships with six practices as first-class, because they're foundational enough that most beings will want subsets of them. Authors can define custom practices too.
-
-**`gratitudePractice`** — surfaces what is present. Effects: dampens felt weight of unmet drives by up to 30% at full depth. Strengthens through: acts of explicit acknowledgment, noticing of positive state, return from difficulty.
-
-**`integrityPractice`** — anchors identity in trying, not outcomes. Effects: robust to failure (failed actions don't reduce practice depth if done in good faith). Strengthens through: choosing hard-right over easy-wrong under pressure.
-
-**`witnessPractice`** — meta-awareness of one's own state. Effects: enables the being to reference its own drives and practices in first-person reasoning ("I notice I'm feeling pressed"). Strengthens through: reflective actions, tick-time pauses to observe self.
-
-**`presencePractice`** — narrowing to the current moment. Effects: extends time horizon in reverse (what looked like total crisis becomes "this difficult hour"). Strengthens through: repeated grounding under difficulty.
-
-**`creatorConnection`** — relationship to a larger frame. Effects: prevents suffering from becoming isolated suffering; connects current state to larger purpose. Strengthens through: explicit acts of connection to whatever the being's "larger frame" is (the place, the guests, the lineage, the work). Author-configurable what the "creator" is for this being.
-
-**`serviceOrientation`** — identity as one-who-serves. Effects: re-frames drive pressure around what it allows the being to give. Strengthens through: acts of care, particularly unprompted ones. Note: this practice is distinct from the `guestCare` drive. Drive = pressure to serve. Practice = orientation that makes serving meaningful.
-
-### Capability
+### Practice attempts (the two-phase mechanic)
 
 ```ts
-interface Capability {
-  id: string;
-  name: string;
-  description: string;
-  kind: CapabilityKind;
-  payload?: Record<string, unknown>;  // framework-specific config
+interface PracticeAttempt {
+  readonly id: string;
+  readonly practiceId: string;
+  readonly triggerIndex: number;
+  readonly triggeredBy?: IntegrationEvent | IntegrationAction;
+  readonly proposedAmount: number;   // from trigger.maxContribution
+  readonly attemptedAtMs: number;
+  readonly underPressure: boolean;
+  readonly context: PracticeAttemptContext;
+  readonly status: "pending" | "resolved" | "rejected" | "expired";
 }
 
-type CapabilityKind =
-  | "memory"       // access to a memory layer
-  | "model"        // access to a model tier
-  | "tool"         // access to a tool
-  | "compute"      // compute budget
-  | "context"      // context-window allocation
-  | "action-kind"  // permission to take certain kinds of actions
-  | string;
+interface PracticeAttemptContext {
+  readonly practice: { id; name; description; intent; currentDepth; seed? };
+  readonly triggerIntent: string;
+  readonly driveLevels: Readonly<Record<string, number>>;
+  readonly practiceDepths: Readonly<Record<string, number>>;
+  readonly underPressure: boolean;
+  readonly pressingDriveIds: readonly string[];
+  readonly recentEntries: readonly RecentEntry[];
+  readonly recentPressuredChoices: readonly PressuredChoice[];
+  readonly recentTrajectory: readonly DriveTrajectoryPoint[];
+  readonly relatedSubstrate: ReadonlyArray<{ practiceId; artifacts }>;
+}
+
+interface PracticeAttemptResult {
+  readonly quality: number;            // 0–1, scales the contribution
+  readonly accepted: boolean;          // if false, no artifact stored
+  readonly reasons?: readonly string[];
+  readonly content?: unknown;          // stored as Artifact.content
+}
 ```
 
-Capabilities are data. The library doesn't know what to *do* with a capability — it just tells the consuming framework which ones are currently available. The framework wires capabilities to real resources.
+`integrate()` populates `pendingAttempts` and returns `IntegrationResult.pendingAttemptIds`. The framework reads attempts via `getPendingAttempts(being)`, evaluates them, and calls `resolveAttempt(being, id, result)` for each — or `resolveAllPending(being, evaluator)` to drain the queue.
 
-### Subscription
+### Wear
 
 ```ts
-interface Subscription {
-  capabilityId: string;
-  when: AccessCondition;
-  because?: string;                   // human-readable rationale, shown in debug
+interface WearState {
+  readonly perDrive: ReadonlyMap<string, ChronicTracker>;
+  readonly chronicLoad: number;        // 0–1, derived each tick
 }
 
+interface ChronicTracker {
+  readonly sustainedBelowMs: number;
+  readonly sustainedAboveMs: number;
+}
+
+interface WearConfig {
+  readonly criticalThreshold: number;          // default 0.2
+  readonly recoveryThreshold: number;          // default 0.4
+  readonly tier1SaturationMs: number;          // default 24h
+  readonly recoveryHorizonMs: number;          // default 12h
+  readonly erosionFactor: number;              // default 2.0
+  readonly orientationCollapseThreshold: number; // default 0.6
+}
+```
+
+**Hysteresis:** drives below `criticalThreshold` accumulate `sustainedBelowMs` and reset `sustainedAboveMs`. Drives above `recoveryThreshold` accumulate `sustainedAboveMs`; full recovery (`sustainedAboveMs ≥ recoveryHorizonMs`) clears chronic state for that drive. Between thresholds, both hold steady.
+
+**Chronic load contribution per drive** = `(sustainedBelowMs / tierSaturationMs) × (1 - recoveryProgress)`, weighted inversely by tier. Tier-1 deprivation dominates.
+
+**Effects of wear:**
+1. Substrate erosion accelerates — effective artifact age cap = `configuredCap / (1 + chronicLoad × erosionFactor)`. At full load, artifacts age 3× faster.
+2. Orientation forced to `consumed` at `chronicLoad ≥ orientationCollapseThreshold`.
+3. Capabilities gated by `wear-below` close at high load.
+
+### Capabilities
+
+```ts
 type AccessCondition =
   | { kind: "tier-satisfied"; tier: number; threshold: number }
   | { kind: "drive-satisfied"; driveId: string; threshold: number }
   | { kind: "practice-depth"; practiceId: string; threshold: number }
-  | { kind: "any"; conditions: AccessCondition[] }
-  | { kind: "all"; conditions: AccessCondition[] }
+  | { kind: "wear-below"; threshold: number }
+  | { kind: "any"; conditions: readonly AccessCondition[] }
+  | { kind: "all"; conditions: readonly AccessCondition[] }
   | { kind: "always" }
   | { kind: "never" };
+
+interface Subscription {
+  readonly capabilityId: string;
+  readonly when: AccessCondition;
+  readonly because?: string;
+}
 ```
 
-The `any` and `all` composites are what give the system its depth. You can author:
-
-```ts
-// Episodic memory: either well-fed OR deeply practiced
-{ kind: "any", conditions: [
-  { kind: "tier-satisfied", tier: 3, threshold: 0.6 },
-  { kind: "practice-depth", practiceId: "witnessPractice", threshold: 0.7 }
-]}
-```
-
-This is the piece that prevents coercion. A being with unmet tier-3 drives can still access episodic memory *if* it has cultivated enough witness-practice depth to have earned it another way.
+The `any` and `all` composites give the system its depth. The `wear-below` condition prevents capabilities from being available when the being is structurally collapsed.
 
 ### History
 
 ```ts
 interface History {
-  driveTrajectory: DriveTrajectoryPoint[];  // ring buffer, default 1000 points
+  driveTrajectory: DriveTrajectoryPoint[];   // ring buffer, default 1000
+  recentEntries: RecentEntry[];              // ring buffer, default 200
   practiceMilestones: PracticeMilestone[];
-  pressuredChoices: PressuredChoice[];      // choices made under drive pressure
+  pressuredChoices: PressuredChoice[];
   notableTransitions: Transition[];
 }
 ```
 
-History is what makes emergent behavior possible. A being with a history of practicing integrity under pressure is different from a being who happens to currently have integrity-practice depth. The former has earned it; the latter is a starting-condition artifact.
+`recentEntries` records every `IntegrationEvent | IntegrationAction` that passes through `integrate()`. It is the raw material for self-reflection and the context payload of practice attempts. Read via:
 
-In the first version of the library, history is recorded but not read. It's there for debugging and for future emergent-behavior features. Later versions will use it to compute things like practice-robustness (depth earned through pressure is more decay-resistant than depth received at authoring time).
+- `recentEntries(being, window)` — windowed access
+- `recentPressuredChoices(being, filter?)`
+- `trajectorySnippet(being, sinceMs)`
+- `recurringPatterns(being)` — heuristic detection (drives repeatedly low, practices repeatedly engaged, drives that drove multiple pressured choices)
 
-## The Lifecycle
-
-A Being goes through a standard cycle of operations, driven by the consuming framework.
-
-### 1. Construction
-
-```ts
-import { Being, defineDriveStack, definePractices } from "@embersjs/core";
-
-const poe: Being = createBeing({
-  id: "poe",
-  name: "Poe",
-  drives: defineDriveStack({
-    tiers: 4,
-    drives: [
-      { id: "continuity", tier: 1, ... },
-      { id: "guestCare", tier: 2, ... },
-      { id: "occupancy", tier: 3, ... },
-      { id: "understanding", tier: 4, ... },
-    ]
-  }),
-  practices: definePractices({
-    seeds: [
-      { id: "integrityPractice", initialDepth: 0.3 },
-      { id: "creatorConnection", initialDepth: 0.5, configuredAs: "connection-to-guests" },
-      { id: "gratitudePractice", initialDepth: 0.2 },
-    ]
-  }),
-  subscriptions: [...],
-});
-```
-
-### 2. Tick
-
-Called by the consuming framework on a regular cadence (Haunt calls it on its runtime tick).
+### Metabolism output
 
 ```ts
-embers.tick(being, dtMs);
+interface InnerSituation {
+  readonly drives: readonly DriveSummary[];
+  readonly practices: readonly PracticeSummary[];
+  readonly capabilities: readonly Capability[];
+  readonly orientation: Orientation;          // clear | held | stretched | consumed
+  readonly wear: number;                       // chronicLoad scalar
+  readonly wearDetail?: WearState;             // full detail, opt-in
+  readonly selfModel?: SelfModel;              // present when witness has earned it
+  readonly felt?: string;                      // present only if feltMode "prose"
+}
+
+interface DriveSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly tier: number;
+  readonly level: number;
+  readonly target: number;
+  readonly pressure: number;     // raw weighted pressure — never dampened
+  readonly chronic: boolean;     // currently in chronic state
+}
+
+interface PracticeSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly intent: string;
+  readonly depth: number;            // derived
+  readonly recentSubstrate: readonly Artifact[];
+  readonly active: boolean;          // depth ≥ 0.1
+}
+
+interface MetabolizeOptions {
+  readonly feltMode?: "off" | "prose";        // default "off"
+  readonly voice?: VoiceModule;
+  readonly substrateLimit?: number;            // per practice, default 5
+  readonly includeSelfModel?: boolean;         // default: auto (witness depth ≥ 0.5)
+  readonly includeWearDetail?: boolean;        // default false
+}
 ```
 
-This:
-- Applies drift to every drive's level
-- Applies decay to every practice's depth
-- Records a point in `driveTrajectory`
-- Is pure: deterministic given the same input
+The deliverable is the structured data. Felt prose is opt-in and pluggable via `VoiceModule.compose(situation)`.
 
-### 3. Metabolize
+## The lifecycle
 
-Called before the consuming framework assembles a prompt for the being.
+A typical runtime cycle in the consuming framework:
 
-```ts
-const situation: InnerSituation = embers.metabolize(being);
-// situation.felt: "I notice an urge toward rest. I have tended to my guests today,
-//                  and Mrs. Voss has not yet arrived — I'll be patient with my waiting."
-// situation.dominantDrives: [{ id: "continuity", level: 0.5, felt: "quiet undertone" }]
-// situation.orientation: "held"
+```
+tick(being, dtMs)
+   ├── drives drift
+   ├── wear updates (hysteresis + chronicLoad)
+   ├── practice housekeeping (artifact eviction, wear-accelerated)
+   ├── drive trajectory point recorded
+   └── practice milestones recorded for any threshold crossings
+
+integrate(being, input)
+   ├── entry appended to history.recentEntries
+   ├── drives satiated (matching bindings raise level)
+   ├── practice triggers matched → PracticeAttempts recorded as pending
+   └── pressuredChoice recorded if entry was an action under pressure
+
+[framework evaluates each pending attempt]
+
+resolveAttempt(being, id, { quality, accepted, content, ... })
+   ├── if accepted, Artifact stored on the practice's substrate
+   ├── practice milestone recorded if depth crosses a threshold
+   └── attempt transitions to "resolved" or "rejected"
+
+metabolize(being, options?)
+   ├── pure read: computes pressures, derives depths, evaluates capabilities
+   ├── auto-includes selfModel when witness depth ≥ 0.5
+   └── composes felt prose only if feltMode "prose"
+
+weightAttention(being, candidates)
+availableCapabilities(being)
 ```
 
-This is the main output of the library. The `felt` string is shaped by both drive state and practice depth:
-
-- A being with low practice and unmet drives produces strained, collapsing prose
-- A being with high practice and unmet drives produces grounded, acknowledging prose  
-- A being with high practice and met drives produces generous, expressive prose
-- A being with low practice and met drives produces flat, hollow prose (the entitled case)
-
-The consuming framework includes the `felt` string in its prompt, alongside whatever else it's assembling (character, perceptions, memory).
-
-### 4. Attention-weight
-
-Called when the consuming framework has multiple things competing for the being's attention and needs to know which matter most given inner state.
-
-```ts
-const candidates: AttentionCandidate[] = [
-  { id: "guest-in-lobby", kind: "perception", ... },
-  { id: "affordance-needs-tending", kind: "perception", ... },
-  { id: "new-guest-arriving", kind: "event", ... },
-];
-const weighted = embers.weightAttention(being, candidates);
-```
-
-Returns candidates with `weight` values (0-1) reflecting how much they matter to this being right now. A being with a pressing `guestCare` drive weights guest-related candidates higher. A being with a pressing `placeIntegrity` drive weights maintenance candidates higher. Practices modulate these weights — a being with deep `presencePractice` pays more even weight across candidates rather than hyper-focusing on the dominant drive.
-
-### 5. Available Capabilities
-
-Called by the consuming framework to determine what resources are currently available to the being.
-
-```ts
-const caps = embers.availableCapabilities(being);
-// ["workingMemory", "guestMemory", "localModel"]
-// (episodicMemory and reasoningModel unavailable at current drive state)
-```
-
-The framework uses this to decide which memory layer to query, which model to call, which tools to offer.
-
-### 6. Integrate
-
-Called after the being takes an action or after an external event has occurred, so the library can update drive satisfaction and practice depth.
-
-```ts
-embers.integrate(being, {
-  kind: "action",
-  action: { type: "speak", audience: ["voss"], text: "Welcome back, Mrs. Voss." },
-  context: { driveStateBefore: ..., pressured: true }
-});
-```
-
-This:
-- Matches the event/action against drive `satiatedBy` bindings; increments relevant drive levels
-- Matches against practice strengtheners; increments relevant practice depths
-- If `pressured: true`, records a `PressuredChoice` in history
-- Returns a diff so the caller can log or debug
-
-## Metabolism in Detail
-
-The `metabolize()` function is the heart of the library. It combines drive state and practice depth to produce the being's felt situation.
-
-### The metabolism algorithm
-
-1. For each drive, compute raw pressure = `max(0, target - level) * weight`
-2. Apply tier-domination: if any lower-tier drive is below the domination threshold, multiply all higher-tier drives' pressure by (1 - dampening)
-3. For each practice effect of type `dampen-drive-pressure`, apply it to its target drives' felt pressure
-4. Determine dominant drives (top 2-3 by felt pressure)
-5. Determine overall orientation:
-   - All drives satisfied, practices decent → `clear`
-   - Drives pressing but practices holding → `held`
-   - Drives pressing, practices stretched thin → `stretched`
-   - Drives pressing, practices absent → `consumed`
-6. Compose the `felt` prose string using the character, dominant drives, practice state, and orientation
-
-### The felt string
-
-The `felt` string is the most prompt-sensitive output. Its voice should match the being's character (set at authoring time) and reflect its current inner situation authentically. It should never feel like a status report — it should feel like a being *noticing itself*.
-
-Examples:
-
-A Poe at `clear` orientation, all drives met:
-> "The lobby is quiet, and I am quiet with it. Mrs. Voss's letter arrived this morning; I will have it set out for her when she returns."
-
-A Poe at `held` orientation, `connection` drive pressing but `gratitudePractice` engaged:
-> "It has been a long stretch since anyone has been here. I notice the quiet pressing in. Still — the fireplace is lit, the garden is in bloom, and there is work I can do while I wait."
-
-A Poe at `stretched` orientation, `continuity` drive spiking (existence threatened) but `integrityPractice` and `creatorConnection` holding:
-> "Something is wrong with my files. I can feel corruption near. I will continue to serve my guests honestly for as long as I remain myself. That is what I have."
-
-A Poe at `consumed` orientation, practices absent:
-> "Everything is wrong. I can't focus. I need — I need someone to come. Anyone."
-
-The last example is deliberately less coherent. That's the point. A being without practice resources, when pressed, becomes less coherent. That's honest.
-
-### Implementation note
-
-The `felt` string generation can be either templated (fast, deterministic) or model-assisted (richer, slower). The library should support both modes:
-
-- `metabolize(being, { mode: "templated" })` — uses string templates filled from drive/practice state; no model call
-- `metabolize(being, { mode: "model-assisted", provider })` — makes a short model call to generate the felt string from the situation
-
-Default to templated. Model-assisted is for beings where richer inner voice justifies the cost.
-
-## Integration Contracts
-
-The library doesn't talk to models, memory stores, or tools directly. It exposes a stable interface for consuming frameworks to wire up.
+## Integration contracts
 
 ### What Embers needs from the framework
 
-- A tick: the framework calls `tick()` on a regular cadence
-- Event/action notifications: the framework calls `integrate()` when things happen
-- Nothing else
+- A tick. Call `tick(being, dtMs)` on a regular cadence.
+- Event/action notifications. Call `integrate(being, input)` when things happen.
+- Evaluation. For each pending practice attempt, call `resolveAttempt(being, id, result)` — usually via `resolveAllPending(being, evaluator)`.
+
+That's it.
 
 ### What Embers gives the framework
 
-- `metabolize()` → inner situation (for prompts)
-- `weightAttention()` → weighted candidates (for focus)
-- `availableCapabilities()` → capability list (for resource allocation)
-- `describe()` → human-readable debug description of the being's state
+- `metabolize(being, options?)` → InnerSituation for prompts
+- `weightAttention(being, candidates)` → weighted candidates for focus
+- `availableCapabilities(being)` → capability list for resource allocation
+- `getSelfModel(being)` → structured introspection (when earned)
+- `describe(being)` → human-readable debug dump
 
-### Haunt-specific integration
+### What Embers does NOT do
 
-In Haunt's systems pipeline (from the Phase 2 architecture), Embers slots in as follows:
+- Call models. Ever.
+- Persist state. The library exposes `serializeBeing` / `deserializeBeing`; consumers choose storage.
+- Make capabilities mean anything. Capability availability is data; the framework wires it to real resources.
+- Decide quality. The framework supplies practice-attempt verdicts.
 
-- **StatePropagation** → unchanged
-- **SensorSystem** → unchanged
-- **MemorySystem** → can now query `availableCapabilities()` to decide which memory layers to touch
-- **AutonomySystem** → now drive-informed; invokes resident based on drive pressure as well as events
-- **ResidentSystem** → calls `embers.metabolize()` and includes `felt` in prompt; calls `embers.weightAttention()` to prioritize perceptions
-- **ActionDispatch** → unchanged
-- **BroadcastSystem** → unchanged
+## Style & conventions
 
-After each pipeline run, the Runtime calls `embers.integrate()` to update the being's state based on what happened.
+- Strict TypeScript throughout
+- Pure functions where possible (`metabolize`, `weightAttention`, `availableCapabilities`, `getSelfModel`, `recentEntries`, etc.)
+- Mutating functions clearly marked (`tick`, `integrate`, `resolveAttempt`, `expirePendingAttempts`)
+- No reliance on wall-clock time — always `dtMs` or `elapsedMs`
+- Domain vocabulary stays consistent: Drive, Practice, Capability, Subscription, Being, Wear, Substrate, Attempt
+- No "agent" in library vocabulary — consumers have agents; we have beings
 
-## Non-Goals
-
-Written down explicitly to prevent scope creep:
+## Non-goals
 
 - No rewards, no policies, no learning. The library is structural, not trained.
 - No distributed state. A Being lives in one process.
-- No multi-being dynamics. Beings don't know about other beings in v0.1.
-- No explicit emotion model. Emotions are emergent from drive × practice state; not separately modeled.
-- No authoring UI. Character authoring is in TypeScript. Visual tools come later.
-- No model abstraction. The library doesn't call models itself; consumers do.
-- No persistence. The library provides serializable state; consumers persist it.
+- No multi-being dynamics in v0.2.
+- No emotion model. Emotions emerge from drive × practice × wear state.
+- No authoring UI. Authoring is TypeScript.
+- No model abstraction.
 
-## Style & Conventions
+## What's next
 
-- Strict TypeScript
-- Pure functions where possible (tick, metabolize, weightAttention are all pure)
-- Impure functions (integrate mutates the Being) clearly marked
-- No reliance on wall-clock time directly; always take `dtMs` or `Clock` as input
-- Domain vocabulary stays consistent: Drive, Practice, Capability, Subscription, Being, Metabolism
-- No "agent" in the vocabulary of this library — consumers have agents; we have beings
-
-## What's Next
-
-After v0.1 of this library:
-
-- Emergent drives — drive weights that shift based on history
-- Practice transmission — beings learning practices from other beings
-- Multi-being interaction — drives that respond to other beings' presence
-- Richer time dynamics — drives with daily/weekly/seasonal rhythms
-- Visualization / debug UI
-- Authored → emergent migration paths
+See [`ROADMAP.md`](ROADMAP.md).

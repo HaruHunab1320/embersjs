@@ -11,10 +11,14 @@ import type {
 } from "../types.js";
 import { clamp01 } from "../util.js";
 
-/** Default domination rules per the architecture spec. */
+/**
+ * Default domination rules. The `attentionDampening` factor is applied to
+ * higher-tier drives' attention weight when a lower tier is dominating —
+ * it does NOT reduce pressure (drives stay loud in v0.2).
+ */
 const DEFAULT_DOMINATION_RULES: DominationRules = {
   threshold: 0.3,
-  dampening: 0.7,
+  attentionDampening: 0.7,
 };
 
 /**

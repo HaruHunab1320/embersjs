@@ -1,102 +1,66 @@
 /**
- * Pressure computation: turns raw drive state into felt pressure,
- * after applying tier-domination and practice effects.
+ * Pressure computation: turns raw drive state into weighted pressure.
+ *
+ * In v0.2, pressure is never reduced by practices. The being feels the full
+ * weight of its drives. What practice changes is what the being can bring
+ * to meet that pressure, surfaced via substrate retrieval in metabolism.
+ *
+ * Tier domination is no longer applied here — it shifts attention weighting
+ * (in attention.ts), not pressure itself.
  */
 
-import { dominantTier, drivePressure, weightedPressure } from "../drives/query.js";
-import type { ComposedEffects } from "../practices/effects.js";
+import { drivePressure, weightedPressure } from "../drives/query.js";
 import type { Drive, DriveStack } from "../types.js";
 
 /**
- * A drive's pressure after all modulations have been applied.
+ * A drive's raw and weighted pressure.
  */
-export interface FeltDrivePressure {
+export interface DrivePressureSummary {
   readonly drive: Drive;
   /** Raw pressure: max(0, target - level). */
   readonly rawPressure: number;
-  /** Raw pressure * weight. */
+  /** Weighted pressure: rawPressure × weight. */
   readonly weightedPressure: number;
-  /** After tier-domination dampening. */
-  readonly dominatedPressure: number;
-  /** After practice-effect dampening — the final felt pressure. */
-  readonly feltPressure: number;
 }
 
 /**
- * Computes felt pressure for every drive in the stack.
+ * Computes pressure for every drive in the stack.
  *
- * The pipeline:
- * 1. Raw pressure = max(0, target - level)
- * 2. Weighted pressure = raw * weight
- * 3. Tier domination: if a lower tier is dominating, higher-tier
- *    drives have their pressure multiplied by (1 - dampening)
- * 4. Practice effects: dampen-drive-pressure effects reduce felt
- *    pressure further
- *
- * Pure function.
+ * Pure function. Returns drives sorted by weighted pressure descending.
  */
-export function computeFeltPressures(
-  stack: DriveStack,
-  effects: ComposedEffects,
-): FeltDrivePressure[] {
-  const domTier = dominantTier(stack);
-  const results: FeltDrivePressure[] = [];
-
+export function computePressures(stack: DriveStack): DrivePressureSummary[] {
+  const results: DrivePressureSummary[] = [];
   for (const drive of stack.drives.values()) {
-    const raw = drivePressure(drive);
-    const weighted = weightedPressure(drive);
-
-    // Tier domination: higher tiers are dampened when a lower tier dominates
-    let dominated = weighted;
-    if (domTier !== undefined && drive.tier > domTier) {
-      dominated = weighted * (1 - stack.dominationRules.dampening);
-    }
-
-    // Practice dampening
-    let felt = dominated;
-
-    // Apply drive-specific dampening
-    const specificDampening = effects.driveDampening.get(drive.id);
-    if (specificDampening !== undefined) {
-      felt = felt * (1 - specificDampening);
-    }
-
-    // Apply global dampening (empty-string key)
-    const globalDampening = effects.driveDampening.get("");
-    if (globalDampening !== undefined) {
-      felt = felt * (1 - globalDampening);
-    }
-
     results.push({
       drive,
-      rawPressure: raw,
-      weightedPressure: weighted,
-      dominatedPressure: dominated,
-      feltPressure: Math.max(0, felt),
+      rawPressure: drivePressure(drive),
+      weightedPressure: weightedPressure(drive),
     });
   }
-
-  // Sort by felt pressure descending
-  results.sort((a, b) => b.feltPressure - a.feltPressure);
-
+  results.sort((a, b) => b.weightedPressure - a.weightedPressure);
   return results;
 }
 
 /**
- * Returns the top N drives by felt pressure.
+ * Returns the top N drives by weighted pressure.
  */
-export function dominantDrives(pressures: FeltDrivePressure[], n = 3): FeltDrivePressure[] {
+export function dominantDrives(pressures: DrivePressureSummary[], n = 3): DrivePressureSummary[] {
   return pressures.slice(0, n);
 }
 
 /**
- * Returns the total felt pressure across all drives.
- * Useful for orientation determination.
+ * Total weighted pressure across all drives.
  */
-export function totalFeltPressure(pressures: FeltDrivePressure[]): number {
+export function totalPressure(pressures: DrivePressureSummary[]): number {
   let total = 0;
-  for (const p of pressures) {
-    total += p.feltPressure;
-  }
+  for (const p of pressures) total += p.weightedPressure;
   return total;
+}
+
+/**
+ * Average weighted pressure across all drives. 0 for empty stack.
+ */
+export function averagePressure(pressures: DrivePressureSummary[]): number {
+  if (pressures.length === 0) return 0;
+  return totalPressure(pressures) / pressures.length;
 }

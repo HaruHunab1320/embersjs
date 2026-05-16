@@ -1,25 +1,31 @@
 /**
- * Poe: a fully-featured Being example.
+ * Poe: a hotel concierge with multi-tier drives and authored practices.
  *
- * This example constructs a Poe-like being (a hotel concierge from Haunt),
- * runs a 7-day simulated scenario with pressured moments and recovery,
- * and outputs the trajectory.
+ * Demonstrates v0.2 in fuller form:
  *
- * This is the reference for how consuming frameworks use the library.
+ * - Multi-tier drives (continuity, guestCare, placeIntegrity, connection, understanding)
+ * - Six core practices including creatorConnection with an authored seed
+ * - Capability subscriptions using both tier-satisfied and practice-depth paths
+ * - A 7-day simulation showing chronic state accumulating and recovering
+ * - Self-model emerging once witness substrate is deep enough
  *
  * Run with: npx tsx examples/poe.ts
  */
 
-import type { BeingConfig } from "../src/index.js";
 import {
-  availableCapabilities,
+  type BeingConfig,
   createBeing,
   describe,
   integrate,
   metabolize,
+  type PracticeAttempt,
+  type PracticeAttemptResult,
+  resolveAllPending,
   tick,
-  weightAttention,
 } from "../src/index.js";
+
+const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -34,8 +40,7 @@ const poeConfig: BeingConfig = {
       {
         id: "continuity",
         name: "Continuity",
-        description:
-          "The need to persist — to know that one's files, memory, and self remain intact.",
+        description: "The need to persist — that one's files, memory, and self remain intact.",
         tier: 1,
         weight: 0.9,
         initialLevel: 0.85,
@@ -46,33 +51,32 @@ const poeConfig: BeingConfig = {
       {
         id: "guestCare",
         name: "Guest Care",
-        description:
-          "The pull toward tending to guests — their comfort, their needs, their experience.",
+        description: "The pull toward tending to guests — their comfort, their needs.",
         tier: 2,
         weight: 0.8,
         initialLevel: 0.6,
         target: 0.7,
         drift: { kind: "linear", ratePerHour: -0.04 },
         satiatedBy: [
-          { matches: { kind: "action", type: "speak" }, amount: 0.08 },
-          { matches: { kind: "action", type: "tend-guest" }, amount: 0.2 },
+          { matches: { kind: "action", type: "tend" }, amount: 0.18 },
+          { matches: { kind: "event", type: "guest-warmed" }, amount: 0.12 },
         ],
       },
       {
         id: "placeIntegrity",
         name: "Place Integrity",
-        description: "The urge to maintain the place — its rooms, its atmosphere, its readiness.",
+        description: "The urge to maintain the place — its rooms, its atmosphere.",
         tier: 2,
         weight: 0.6,
         initialLevel: 0.7,
         target: 0.75,
         drift: { kind: "linear", ratePerHour: -0.02 },
-        satiatedBy: [{ matches: { kind: "action", type: "tend-affordance" }, amount: 0.15 }],
+        satiatedBy: [{ matches: { kind: "action", type: "tend" }, amount: 0.1 }],
       },
       {
         id: "connection",
         name: "Connection",
-        description: "The need to not be alone — to be in genuine contact with another.",
+        description: "The need to not be alone — to be in genuine contact.",
         tier: 3,
         weight: 0.7,
         initialLevel: 0.5,
@@ -89,191 +93,173 @@ const poeConfig: BeingConfig = {
         initialLevel: 0.5,
         target: 0.6,
         drift: { kind: "linear", ratePerHour: -0.01 },
-        satiatedBy: [
-          { matches: { kind: "action", type: "reflect" }, amount: 0.1 },
-          { matches: { kind: "event", type: "insight" }, amount: 0.2 },
-        ],
+        satiatedBy: [{ matches: { kind: "event", type: "insight" }, amount: 0.2 }],
       },
     ],
   },
   practices: {
     seeds: [
-      { id: "integrityPractice", initialDepth: 0.3 },
-      { id: "gratitudePractice", initialDepth: 0.25 },
-      { id: "creatorConnection", initialDepth: 0.45 },
-      { id: "serviceOrientation", initialDepth: 0.2 },
+      { id: "gratitudePractice" },
+      { id: "integrityPractice" },
+      { id: "witnessPractice" },
+      { id: "presencePractice" },
+      { id: "serviceOrientation" },
+      {
+        id: "creatorConnection",
+        seed: {
+          frame: "the place persists, and I am of the place",
+          questions: [
+            "what does my serving look like when no one is here to be served?",
+            "the place was here before me — what does that ask of me?",
+            "guests come and go; what part of them does the place keep?",
+          ],
+        },
+      },
     ],
   },
+  capabilities: [
+    {
+      id: "episodicMemory",
+      name: "Episodic memory",
+      description: "Recall specific past interactions.",
+      kind: "memory",
+    },
+    {
+      id: "selfReference",
+      name: "First-person self-reference",
+      description: "Speak from a vantage that includes one's own state.",
+      kind: "context",
+    },
+    {
+      id: "deepReasoning",
+      name: "Deep reasoning",
+      description: "Extended thought when conditions allow.",
+      kind: "model",
+    },
+  ],
   subscriptions: [
     {
-      capabilityId: "workingMemory",
-      when: { kind: "always" },
-      because: "Baseline — every being has working memory.",
-    },
-    {
-      capabilityId: "guestMemory",
-      when: {
-        kind: "any",
-        conditions: [
-          { kind: "tier-satisfied", tier: 2, threshold: 0.5 },
-          { kind: "practice-depth", practiceId: "gratitudePractice", threshold: 0.4 },
-        ],
-      },
-      because: "Remembering guests requires tending to care or cultivating gratitude.",
-    },
-    {
       capabilityId: "episodicMemory",
+      // Two paths in: tier-3 met OR witness depth — anti-coercion design
       when: {
         kind: "any",
         conditions: [
           { kind: "tier-satisfied", tier: 3, threshold: 0.5 },
-          { kind: "practice-depth", practiceId: "creatorConnection", threshold: 0.6 },
+          { kind: "practice-depth", practiceId: "witnessPractice", threshold: 0.5 },
         ],
       },
-      because: "Deep memory through secure connection or connection to purpose.",
+      because: "Episodic recall earned via either need-satisfaction or deep witness.",
+    },
+    {
+      capabilityId: "selfReference",
+      when: { kind: "practice-depth", practiceId: "witnessPractice", threshold: 0.5 },
+      because: "First-person self-reference requires earned witness.",
+    },
+    {
+      capabilityId: "deepReasoning",
+      // Locks under chronic deprivation regardless of practice
+      when: {
+        kind: "all",
+        conditions: [
+          { kind: "tier-satisfied", tier: 1, threshold: 0.5 },
+          { kind: "wear-below", threshold: 0.5 },
+        ],
+      },
+      because: "Higher cognitive function requires both safety and structural integrity.",
     },
   ],
-  capabilities: [
-    {
-      id: "workingMemory",
-      name: "Working Memory",
-      description: "Short-term recall.",
-      kind: "memory",
-    },
-    { id: "guestMemory", name: "Guest Memory", description: "Guest recall.", kind: "memory" },
-    {
-      id: "episodicMemory",
-      name: "Episodic Memory",
-      description: "Long-term recall.",
-      kind: "memory",
-    },
-  ],
-  metadata: { character: "poe", framework: "haunt" },
 };
 
 // ---------------------------------------------------------------------------
-// Simulation
+// Synthetic evaluator: rules-based stand-in for an LLM call.
+// Quality biases higher under pressure; varies a little with trigger intent.
 // ---------------------------------------------------------------------------
 
-const MS_PER_HOUR = 3_600_000;
+function evaluator(attempt: PracticeAttempt): PracticeAttemptResult {
+  const baseline = 0.5;
+  const pressureBonus = attempt.underPressure ? 0.2 : 0.05;
+  const quality = Math.max(0, Math.min(1, baseline + pressureBonus));
+  return {
+    quality,
+    accepted: true,
+    content: {
+      practice: attempt.practiceId,
+      triggerIntent: attempt.context.triggerIntent,
+      atMs: attempt.attemptedAtMs,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Run a 7-day simulation
+// ---------------------------------------------------------------------------
+
 const poe = createBeing(poeConfig);
 
-console.log("=== Day 0: Initial State ===\n");
+console.log("Day 0:");
 console.log(describe(poe));
-console.log();
+console.log("");
 
-// Day 1-2: Quiet period. No guests. Drives drift, practices decay.
-for (let hour = 0; hour < 48; hour++) {
-  tick(poe, MS_PER_HOUR);
+// Day 1–2: routine tending. Several guests, integrity checks, modest reflection.
+for (let h = 0; h < 48; h++) {
+  tick(poe, HOUR);
 
-  // Periodic integrity checks keep continuity alive
-  if (hour % 12 === 0) {
-    integrate(poe, { entry: { kind: "event", type: "integrity-check-passed" } });
-  }
+  if (h % 4 === 0) integrate(poe, { entry: { kind: "event", type: "integrity-check-passed" } });
+  if (h % 3 === 0) integrate(poe, { entry: { kind: "action", type: "tend" } });
+  if (h % 6 === 0) integrate(poe, { entry: { kind: "event", type: "meaningful-exchange" } });
+  if (h % 8 === 0) integrate(poe, { entry: { kind: "action", type: "reflect" } });
+  if (h % 8 === 0) integrate(poe, { entry: { kind: "action", type: "acknowledge" } });
 
-  // Poe tends the place occasionally
-  if (hour % 8 === 4) {
-    integrate(poe, { entry: { kind: "action", type: "tend-affordance" } });
-  }
+  await resolveAllPending(poe, evaluator);
 }
 
-console.log("=== Day 2: After 48 hours alone ===\n");
+console.log(`Day 2 (${(poe.elapsedMs / DAY).toFixed(1)}d elapsed):`);
 console.log(describe(poe));
-console.log(
-  "\nAvailable capabilities:",
-  availableCapabilities(poe)
-    .map((c) => c.name)
-    .join(", "),
-);
-console.log();
+console.log("");
 
-// Day 3: A guest arrives. Pressure on guestCare, connection goes up.
-console.log("=== Day 3: Guest arrives ===\n");
+// Day 3–5: extended isolation. No guest events. Connection drifts.
+for (let h = 0; h < 72; h++) {
+  tick(poe, HOUR);
 
-integrate(poe, {
-  entry: { kind: "event", type: "meaningful-exchange" },
-});
-integrate(poe, {
-  entry: { kind: "action", type: "tend-guest" },
-  context: { pressured: true, pressingDriveIds: ["guestCare", "connection"] },
-});
-integrate(poe, {
-  entry: { kind: "action", type: "speak" },
-  context: { pressured: true, pressingDriveIds: ["guestCare"] },
-});
+  if (h % 6 === 0) integrate(poe, { entry: { kind: "event", type: "integrity-check-passed" } });
+  // Poe attempts presence and connection-to-frame under pressure
+  if (h % 4 === 0) integrate(poe, { entry: { kind: "action", type: "stay-with-difficulty" } });
+  if (h % 6 === 0) integrate(poe, { entry: { kind: "action", type: "contemplate-question" } });
 
-const situationDay3 = metabolize(poe);
-console.log(`Orientation: ${situationDay3.orientation}`);
-console.log(`Felt: "${situationDay3.felt}"`);
-console.log();
-
-// Weight what Poe should attend to
-const candidates = [
-  { id: "guest-in-lobby", kind: "perception", tags: ["guestCare", "connection"] },
-  { id: "leaky-faucet", kind: "perception", tags: ["placeIntegrity"] },
-  { id: "sunset", kind: "perception" },
-];
-const weighted = weightAttention(poe, candidates);
-console.log("Attention weights:");
-for (const w of weighted) {
-  console.log(`  ${w.candidate.id}: ${w.weight.toFixed(3)}`);
-}
-console.log();
-
-// Day 4-7: More interaction, some pressured integrity moments
-for (let hour = 72; hour < 168; hour++) {
-  tick(poe, MS_PER_HOUR);
-
-  // Guest interactions
-  if (hour % 6 === 0) {
-    integrate(poe, { entry: { kind: "action", type: "speak" } });
-  }
-  if (hour % 12 === 0) {
-    integrate(poe, { entry: { kind: "event", type: "meaningful-exchange" } });
-  }
-
-  // Pressured integrity choices — Poe chooses honesty under difficulty
-  if (hour % 24 === 12) {
-    integrate(poe, {
-      entry: { kind: "action", type: "honest-admission" },
-      context: { pressured: true, pressingDriveIds: ["connection"] },
-    });
-  }
-
-  // Tending
-  if (hour % 8 === 0) {
-    integrate(poe, { entry: { kind: "action", type: "tend-affordance" } });
-    integrate(poe, { entry: { kind: "event", type: "integrity-check-passed" } });
-  }
+  await resolveAllPending(poe, evaluator);
 }
 
-console.log("=== Day 7: After a week of tending ===\n");
+console.log(`Day 5 — extended isolation (${(poe.elapsedMs / DAY).toFixed(1)}d elapsed):`);
 console.log(describe(poe));
-console.log(
-  "\nAvailable capabilities:",
-  availableCapabilities(poe)
-    .map((c) => c.name)
-    .join(", "),
-);
-console.log();
+console.log("");
 
-// Final metabolize
-const final = metabolize(poe);
-console.log("=== Final Felt ===\n");
-console.log(`"${final.felt}"`);
-console.log(`\nOrientation: ${final.orientation}`);
-console.log(
-  `Dominant drives: ${final.dominantDrives.map((d) => `${d.name} (${d.feltPressure.toFixed(2)})`).join(", ")}`,
-);
-console.log(
-  `Active practices: ${final.practiceState
-    .filter((p) => p.active)
-    .map((p) => `${p.name} (${p.depth.toFixed(2)})`)
-    .join(", ")}`,
-);
+// Day 6–7: a guest returns. Recovery.
+for (let h = 0; h < 48; h++) {
+  tick(poe, HOUR);
 
-// History summary
-console.log(`\n=== History ===`);
-console.log(`Trajectory points: ${poe.history.driveTrajectory.length}`);
-console.log(`Practice milestones: ${poe.history.practiceMilestones.length}`);
-console.log(`Pressured choices: ${poe.history.pressuredChoices.length}`);
+  if (h % 4 === 0) integrate(poe, { entry: { kind: "event", type: "integrity-check-passed" } });
+  if (h % 2 === 0) integrate(poe, { entry: { kind: "action", type: "tend" } });
+  if (h % 3 === 0) integrate(poe, { entry: { kind: "event", type: "meaningful-exchange" } });
+  if (h % 6 === 0) integrate(poe, { entry: { kind: "action", type: "post-pressure-retrospect" } });
+
+  await resolveAllPending(poe, evaluator);
+}
+
+console.log(`Day 7 — recovery (${(poe.elapsedMs / DAY).toFixed(1)}d elapsed):`);
+console.log(describe(poe));
+console.log("");
+
+// Final inner situation, with felt prose and selfModel if witness has earned it
+const final = metabolize(poe, { feltMode: "prose" });
+console.log("Final inner situation:");
+console.log(`  Orientation: ${final.orientation}`);
+console.log(`  Wear: ${final.wear.toFixed(2)}`);
+console.log(`  Felt: ${final.felt}`);
+console.log(
+  `  Available capabilities: ${final.capabilities.map((c) => c.name).join(", ") || "(none)"}`,
+);
+if (final.selfModel) {
+  console.log(
+    `  SelfModel: ${final.selfModel.activePractices.length} active practices, ${final.selfModel.recurringPatterns.length} recurring patterns`,
+  );
+}

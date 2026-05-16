@@ -2,7 +2,7 @@
 
 Why the library is shaped the way it is.
 
-## The Problem
+## The problem
 
 Every AI framework ships the same implicit model of motivation: a system prompt. "You are X. You want Y. You should Z." This works — in the same way that a cardboard cutout of a person works. From a distance, at a glance, it's fine. Up close, over time, it falls apart.
 
@@ -10,99 +10,87 @@ The failure mode is coherence. A system-prompted being has no *inner state*. It 
 
 This produces beings that are responsive but not motivated, capable but not developing, articulate but not coherent across time.
 
-## The Bet
+## The bet
 
-Embers is a bet that structural inner life produces more coherent, more interesting, and more humanly-recognizable behavior than instructional motivation.
+Embers is a bet that **structural inner life produces more coherent, more interesting, and more humanly-recognizable behavior than instructional motivation**.
 
 Specifically, the bet is that agents need:
-1. **Persistent needs** that change over time and create real pressure
-2. **Cultivated orientations** that shape how pressure is felt (not whether it exists)
-3. **Contingent capabilities** that expand through development, not just configuration
-4. **Felt experience** that reads as genuine inner life, not data formatting
 
-If this bet is right, a being with Embers produces qualitatively different behavior from one without. If it's wrong, we've built a well-typed data layer that doesn't change anything. The Poe integration will test which it is.
+1. **Persistent needs** that change over time and create real pressure.
+2. **Cultivated capacities** that grow through verified engagement and shape what the being can bring to pressure (not whether pressure exists).
+3. **Higher functions** that come and go with what the being can currently hold.
+4. **A body of history** the being can draw on — its own experience, accumulated.
 
-## Why Not Rewards?
+If this bet is right, a being with Embers produces qualitatively different behavior from one without. Five real-world Haunt simulations confirmed both that *some* of v0.1's design was right (drives create real behavioral pressure; tier domination produces visible shifts) and that *some* of it was drifted (practices were counters, drives could be dampened, depression couldn't happen). v0.2 corrects the drift.
+
+## Why not rewards?
 
 Reinforcement learning is the obvious alternative. Why not give agents reward signals and let them learn motivation?
 
-Because rewards are externally imposed. A reward function says "this is what you should want." A drive says "this is what you *do* want, structurally, as a consequence of how you're built." The difference matters because it produces different failure modes:
+Because rewards are externally imposed. A reward function says "this is what you should want." A drive says "this is what you *do* want, structurally, as a consequence of how you're built." The difference matters because it produces different failure modes: a reward-shaped agent optimizes; a drive-shaped agent *is*.
 
-- A reward-trained agent that encounters a novel situation falls back on its training distribution. A drive-based being falls back on its *needs* — which are present in every situation.
-- A reward-trained agent can't develop new motivations. A drive-based being develops through practices — orientations that emerge from how it meets difficulty.
-- A reward-trained agent's motivation is opaque (it's in the weights). A drive-based being's motivation is inspectable — you can read the drive stack and see what's pressing.
+Embers is also not trying to solve "how do agents learn." It's trying to solve "what does an agent's inner architecture look like such that it produces coherent, recognizable behavior over time." Those are different problems. Learning is downstream of architecture.
 
-This isn't an argument against RL in general. It's an argument that for *authoring coherent beings*, structural motivation is a better primitive than learned motivation.
+## Why drives stay loud (v0.2)
 
-## Why Practices Are Not Drives
+v0.1 allowed practices to dampen drive pressure via a `dampen-drive-pressure` effect. This produced spiritual bypass as a code path: a being with deep gratitude practice would feel its hunger *less*, not feel its hunger more skillfully.
 
-The most common question. Practices look like drives — they have a depth (like a level), they change over time (like drift), they respond to events (like satiation). Why not just model them as drives?
+This was wrong. A human with deep gratitude practice is still hungry when they haven't eaten. The difference isn't that the hunger is quieter — it's that they have more inside them to bring to the hunger. Practice changes the resources brought *to* pressure; it does not subtract from pressure.
 
-Because they serve a fundamentally different role. Drives create pressure. Practices shape how pressure is metabolized.
+Worse: a being whose practice quieted all drives is engineered to never break. Engineered to never collapse, engineered to never need recovery, engineered to never have an arc. That's a stoic philosopher in marble, not a being.
 
-A being with unmet `connection` and deep `gratitudePractice` is still lonely. The drive pressure is real. But the *felt experience* is different — the being notices what is present alongside what is missing. The prompt reflects a being that holds its loneliness rather than collapsing into it.
+So in v0.2: **drives stay loud forever**. Nothing in the library reduces felt pressure. Practices add what the being can bring; they do not subtract. This is also what makes collapse possible — chronic deprivation actually wears the being down, because nothing buffers it.
 
-If practices were drives, they'd create their own pressure. A "gratitude drive" would mean the being *needs* to feel grateful — which is coercive and wrong. Gratitude isn't a need. It's a capacity. Practices are capacities for meeting experience, not additional needs.
+## Why practices are protocol + substrate
 
-The code test: if practice code looks identical to drive code, the design is confused. Practices should have a qualitatively different API surface — depth instead of level, strengthening instead of satiation, effects on metabolism instead of direct state changes.
+In v0.1, practices were `{ id, depth, decay, strengtheners, effects }`. Strengtheners matched event-types and incremented depth. This made practices indistinguishable from drives in terms of mechanism: both moved on event-type matches. The only conceptual difference was a label.
 
-## Why Capability Gating Exists
+Worse, depth was unverified. A framework could call `integrate(being, { entry: { kind: "action", type: "honest-admission" } })` a thousand times and depth would grow each time — without any check that honest admission actually occurred. Practice was theater.
 
-The simplest version of this library would skip capabilities entirely. Just compute drives and practices, output felt strings, done. Why gate capabilities?
+v0.2 reshapes practices around two ideas:
 
-Because capability gating is how the inner architecture connects to the outer architecture. Without it, drives and practices are decorative — they produce nice prompt text but don't change what the being can *do*.
+1. **A practice has a protocol** — a description of what cognitive engagement it represents (the `intent` string), what triggers attempts, what context the evaluator receives. The protocol is the *shape* of cultivation in code.
 
-With capability gating, a being whose drives are met can access deeper memory. A being with deep practice can access capabilities despite unmet drives. The inner state produces outer consequences.
+2. **A practice has substrate** — an accumulating body of artifacts produced by *evaluated* engagement. Depth is derived from substrate (quality × recency × pressure-bonus). No substrate, no depth.
 
-The `any` condition is the design decision that makes this non-coercive rather than punitive. Without it, capability gating would be: "meet your drives or lose your tools." With it: "there are multiple paths to every capability."
+When a trigger fires, no depth changes. The library records a `PracticeAttempt` with rich context. The framework — using whatever cognitive means it has — evaluates the attempt and returns a quality score plus an artifact. Embers stores the artifact. Depth grows because *the work happened*.
 
-## Why Templated, Not Model-Assisted
+This is the v0.2 thesis condensed: **Embers signals, the framework cognizes, Embers integrates**.
 
-The felt strings in v0.1 are generated from templates, not by calling a model. This is a deliberate choice:
+## Why no LLM in the library
 
-1. **Determinism.** Same state → same felt string. This makes testing possible and debugging tractable.
-2. **Speed.** No API call on every metabolize. The being's inner state updates instantly.
-3. **Cost.** No tokens spent on inner-state computation.
-4. **Independence.** The library has zero runtime dependencies. Adding a model call would couple it to a provider.
+A library that calls models becomes a framework. We don't want to be a framework — we want to be the inner-architecture layer that frameworks have been missing. By keeping LLMs out of `src/`, we stay framework-agnostic and avoid coupling the library to any particular cognitive backend.
 
-Model-assisted mode (calling a model to generate richer felt strings from the situation) is designed into the interface but deferred to a future version. The templates have to be good enough that model-assistance is an upgrade, not a fix for broken templates.
+But the consequence is that the library cannot evaluate cognition itself. That's why the two-phase mechanic exists. We define the protocol; the framework supplies the cognition.
 
-## Why No Wall-Clock Time
+## Why wear is separate from orientation
 
-Every function takes `dtMs` as input rather than reading `Date.now()`. This is for testability — you can simulate 24 hours of being life in milliseconds — but it also reflects a design principle: the library models *experiential time*, not physical time. A being that ticks every 30 seconds experiences time differently from one that ticks every 5 minutes, and the library should handle both without knowing which is which.
+Orientation describes the being's *current* pressure-vs-resources state — clear, held, stretched, or consumed. It's instantaneous.
 
-## Why the History Isn't Read
+Wear describes *chronic* structural state — how worn down the being is from sustained deprivation. It accumulates over time and decays through recovery.
 
-In v0.1, history is recorded but not consumed by any library function. It's there for:
+These compose. A being can be currently `held` (acutely managing) while highly worn (vulnerable underneath). A being can be currently `consumed` (acute crisis) with low wear (resilient bedrock). The two together describe what the being is: present moment, structural history.
 
-1. **Debugging.** You can inspect trajectory to see how the being got here.
-2. **Future work.** Emergent-behavior features (practice robustness based on how it was earned, drive-weight evolution based on trajectory) need history. Recording it now means the data is available when the features land.
-3. **Consumer access.** Your framework might want to use history even if the library doesn't yet.
+The collapse mechanic uses both. At `chronicLoad ≥ 0.6`, orientation is forced to `consumed` regardless of practice depth. A being who has been deprived for a long time cannot calmly proclaim peace, no matter how much practice depth they once had. That's the anti-stoic-marble rule. Practice depth is real, but it can erode under sustained pressure — and when it does, the being shows.
 
-The principle: record what you'll need before you need it, but don't build features on top of it until you have real usage data to inform the design.
+## Why history is load-bearing
 
-## Why Six Practices
+In v0.1, history was recorded but never read. A being lonely for 1000 ticks was identical in code to one lonely for 1 tick. That's not how persistence works in humans. We *are* our history in some essential way; self-reflection draws on actual past experience.
 
-The six core practices (gratitude, integrity, witness, presence, creator connection, service orientation) were chosen because they cover the major ways a being can meet difficulty:
+In v0.2, history is the substrate of self-reflection. The practice attempt context includes recent experience, pressured choices, drive trajectory. The `SelfModel` (when witness has earned it) includes recurring patterns drawn from history. Time spent in a state shapes the being.
 
-- **Noticing what's here** (gratitude)
-- **Staying oriented** (integrity)
-- **Seeing yourself** (witness)
-- **Staying in the moment** (presence)
-- **Connecting to something larger** (creator connection)
-- **Serving through it** (service orientation)
+## What the library is and isn't
 
-These aren't the only possible practices. They're the *foundation* — the ones that most beings benefit from having available. Custom practices extend beyond these for specific character needs.
+**It is** the inner-architecture layer between "you are a helpful assistant" and a being that actually wants something. The persistent state that makes an agent's behavior coherent across time.
 
-If a seventh practice seems mandatory, it's worth asking whether one of the six could be refined instead. The six were chosen to be orthogonal — each does something the others can't.
+**It isn't** a complete agent framework. It doesn't run; it computes state. It doesn't reason; it provides context for reasoning. It doesn't act; it tells you what's currently accessible.
 
-## What Success Looks Like
+**It isn't** a learned system. Drives are authored. Practices are authored. Capabilities are authored. The framework you wrap around it can do all the learning you want — Embers will tell it what state the agent is in.
 
-The thesis is proven when:
+**It isn't** a magic prompt-quality improvement. If your character isn't interesting, Embers won't make it interesting. If your framework isn't producing meaningful evaluations of practice attempts, depth won't accumulate meaningfully. The library is honest infrastructure; the texture comes from how you use it.
 
-1. A human reading a being's felt output can tell, without metadata, whether the being's needs are met or unmet, and whether it has practice resources.
-2. A being with drives and practices produces qualitatively more coherent long-term behavior than the same being without.
-3. Authors find the drive/practice/capability model expressive enough to create beings they couldn't create with system prompts alone.
-4. The library is small enough (<2500 lines of implementation) that a developer can read it in an afternoon.
+## The deepest rule
 
-We're at checkpoint 1 and 4. Checkpoints 2 and 3 require real usage.
+This library is attempting something philosophically specific: to design agents as **beings with genuine inner architecture** rather than instruction-shaped behavior patterns. Every design decision is checked against this. If a decision makes the library more generic but less coherent to its thesis, the thesis wins.
+
+You're not building an agent framework. You're building the inner life that agent frameworks have been missing. Keep that frame, and the hard decisions get easier.

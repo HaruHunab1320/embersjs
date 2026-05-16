@@ -1,57 +1,105 @@
 /**
- * The core metabolize function: takes a Being's current state and produces
- * a rich, prompt-ready InnerSituation.
+ * Metabolize: turns a Being's current state into a structured InnerSituation.
  *
- * This is the main output of the library. The `felt` string is what goes
- * into prompts. The structured data informs attention-weighting and
- * capability access decisions by the consuming framework.
+ * In v0.2, the deliverable is the structured data — drives pressing,
+ * practices substantiated, capabilities gated, wear tracked. Felt prose is
+ * opt-in via `MetabolizeOptions.feltMode`.
+ *
+ * Pure function: same Being state + same options produce the same situation.
  */
 
-import { composeEffects } from "../practices/effects.js";
-import type { Being, InnerSituation } from "../types.js";
-import { composeFelt, toDriveSummary, toPracticeSummary } from "./felt-templates.js";
+import { buildSelfModel } from "../being/self-model.js";
+import { availableCapabilities } from "../capabilities/available.js";
+import { computeDepth } from "../practices/depth.js";
+import type {
+  Being,
+  DriveSummary,
+  InnerSituation,
+  MetabolizeOptions,
+  PracticeSummary,
+  SelfModel,
+} from "../types.js";
+import { isChronic } from "../wear/query.js";
+import { defaultVoice } from "./default-voice.js";
 import { determineOrientation } from "./orientation.js";
-import { computeFeltPressures, dominantDrives } from "./pressure.js";
+import { computePressures } from "./pressure.js";
 
-/**
- * Metabolizes a Being's current drive and practice state into an InnerSituation.
- *
- * The output includes:
- * - `dominantDrives`: the 2-3 most pressing drives with their felt descriptions
- * - `practiceState`: all practices with depth and active status
- * - `felt`: prose description of the being's current experience
- * - `orientation`: overall state (clear/held/stretched/consumed)
- *
- * Pure function: same Being state produces the same InnerSituation.
- */
-export function metabolize(being: Being): InnerSituation {
-  // 1. Compose practice effects
-  const effects = composeEffects(being.practices);
+const DEFAULT_SUBSTRATE_LIMIT = 5;
+const WITNESS_THRESHOLD_FOR_SELF_MODEL = 0.5;
+const ACTIVE_DEPTH_THRESHOLD = 0.1;
 
-  // 2. Compute felt pressure for every drive
-  const pressures = computeFeltPressures(being.drives, effects);
+export function metabolize(being: Being, options?: MetabolizeOptions): InnerSituation {
+  const feltMode = options?.feltMode ?? "off";
+  const substrateLimit = options?.substrateLimit ?? DEFAULT_SUBSTRATE_LIMIT;
+  const includeWearDetail = options?.includeWearDetail ?? false;
 
-  // 3. Identify dominant drives (top 3 by felt pressure)
-  const dominant = dominantDrives(pressures, 3);
+  // Drives
+  const pressures = computePressures(being.drives);
+  const drives: DriveSummary[] = pressures.map((p) => ({
+    id: p.drive.id,
+    name: p.drive.name,
+    tier: p.drive.tier,
+    level: p.drive.level,
+    target: p.drive.target,
+    pressure: p.weightedPressure,
+    chronic: isChronic(being.wear, p.drive.id, being.wearConfig),
+  }));
 
-  // 4. Build practice summaries
-  const practiceSummaries = Array.from(being.practices.practices.values()).map((p) =>
-    toPracticeSummary(p.id, p.name, p.depth),
+  // Practices
+  const practices: PracticeSummary[] = [];
+  for (const practice of being.practices.practices.values()) {
+    const depth = computeDepth(practice, being.elapsedMs);
+    const recentSubstrate = practice.substrate.artifacts.slice(-substrateLimit);
+    practices.push({
+      id: practice.id,
+      name: practice.name,
+      intent: practice.intent,
+      depth,
+      recentSubstrate,
+      active: depth >= ACTIVE_DEPTH_THRESHOLD,
+    });
+  }
+  practices.sort((a, b) => b.depth - a.depth);
+
+  // Capabilities
+  const capabilities = availableCapabilities(being);
+
+  // Orientation (factors wear)
+  const orientation = determineOrientation(
+    pressures,
+    being.practices,
+    being.wear,
+    being.wearConfig,
+    being.elapsedMs,
   );
 
-  // 5. Determine orientation
-  const orientation = determineOrientation(pressures, being.practices, effects);
+  // Self-model — auto-include if witness depth is sufficient, unless overridden
+  let selfModel: SelfModel | undefined;
+  const explicit = options?.includeSelfModel;
+  if (explicit === true) {
+    selfModel = buildSelfModel(being);
+  } else if (explicit === undefined) {
+    const witness = being.practices.practices.get("witnessPractice");
+    if (witness && computeDepth(witness, being.elapsedMs) >= WITNESS_THRESHOLD_FOR_SELF_MODEL) {
+      selfModel = buildSelfModel(being);
+    }
+  }
 
-  // 6. Compose the felt string
-  const felt = composeFelt(orientation, dominant, practiceSummaries, effects);
-
-  // 7. Build drive summaries
-  const driveSummaries = dominant.filter((p) => p.feltPressure > 0.01).map(toDriveSummary);
-
-  return {
-    dominantDrives: driveSummaries,
-    practiceState: practiceSummaries,
-    felt,
+  const base: InnerSituation = {
+    drives,
+    practices,
+    capabilities,
     orientation,
+    wear: being.wear.chronicLoad,
+    wearDetail: includeWearDetail ? being.wear : undefined,
+    selfModel,
   };
+
+  if (feltMode === "prose") {
+    const voice = options?.voice ?? defaultVoice;
+    const felt = voice.compose(base);
+    return { ...base, felt };
+  }
+
+  return base;
 }

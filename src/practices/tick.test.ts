@@ -1,83 +1,79 @@
 import { describe, expect, it } from "vitest";
-import { createPracticeSet } from "./construct.js";
+import type { Artifact, PracticeSet, WearState } from "../types.js";
+import { createCorePractice } from "./construct.js";
+import { CORE_PRACTICES } from "./core.js";
 import { tickPractices } from "./tick.js";
 
-const MS_PER_HOUR = 3_600_000;
+const HOUR = 3_600_000;
 
-describe("tickPractices", () => {
-  function makeSet() {
-    return createPracticeSet({
-      seeds: [
-        { id: "integrityPractice", initialDepth: 0.5 },
-        { id: "gratitudePractice", initialDepth: 0.3 },
-      ],
-    });
-  }
+function makeWear(load: number): WearState {
+  return { perDrive: new Map(), chronicLoad: load };
+}
 
-  it("does not mutate the original set", () => {
-    const set = makeSet();
-    const original = set.practices.get("integrityPractice")!.depth;
-    tickPractices(set, MS_PER_HOUR);
-    expect(set.practices.get("integrityPractice")!.depth).toBe(original);
+function fillSubstrate(set: PracticeSet, practiceId: string, ages: number[]): void {
+  const practice = set.practices.get(practiceId)!;
+  const artifacts: Artifact[] = ages.map((age, i) => ({
+    attemptId: `a-${i}`,
+    atMs: -age, // age (older = more negative)
+    quality: 1,
+    underPressure: false,
+    content: null,
+  }));
+  practice.substrate = { artifacts, capacity: 50 };
+}
+
+describe("tickPractices housekeeping", () => {
+  it("evicts artifacts older than artifactMaxAgeMs", () => {
+    const set: PracticeSet = {
+      practices: new Map([
+        [
+          "gratitudePractice",
+          createCorePractice({
+            id: "gratitudePractice",
+            overrides: {
+              protocol: {
+                ...CORE_PRACTICES.gratitudePractice!.protocol,
+                artifactMaxAgeMs: 24 * HOUR,
+              },
+            },
+          }),
+        ],
+      ]),
+    };
+
+    fillSubstrate(set, "gratitudePractice", [1 * HOUR, 10 * HOUR, 30 * HOUR, 48 * HOUR]);
+
+    tickPractices(set, 0, makeWear(0), 2.0);
+
+    const remaining = set.practices.get("gratitudePractice")!.substrate.artifacts;
+    expect(remaining).toHaveLength(2); // 1h and 10h survive; 30h and 48h evicted
   });
 
-  it("applies decay to all practices over time", () => {
-    const set = makeSet();
-    const next = tickPractices(set, MS_PER_HOUR);
-    // integrityPractice decay: -0.005/hr → 0.5 - 0.005 = 0.495
-    expect(next.practices.get("integrityPractice")!.depth).toBeCloseTo(0.495, 10);
-    // gratitudePractice decay: -0.008/hr → 0.3 - 0.008 = 0.292
-    expect(next.practices.get("gratitudePractice")!.depth).toBeCloseTo(0.292, 10);
-  });
+  it("wear accelerates eviction", () => {
+    const set: PracticeSet = {
+      practices: new Map([
+        [
+          "gratitudePractice",
+          createCorePractice({
+            id: "gratitudePractice",
+            overrides: {
+              protocol: {
+                ...CORE_PRACTICES.gratitudePractice!.protocol,
+                artifactMaxAgeMs: 24 * HOUR,
+              },
+            },
+          }),
+        ],
+      ]),
+    };
 
-  it("is a no-op when dtMs is 0", () => {
-    const set = makeSet();
-    const next = tickPractices(set, 0);
-    expect(next).toBe(set);
-  });
+    fillSubstrate(set, "gratitudePractice", [6 * HOUR, 10 * HOUR, 18 * HOUR, 22 * HOUR]);
 
-  it("30-day run with no strengthening shows appropriate decay", () => {
-    let set = makeSet();
-    const days = 30;
-    // Simulate with 1-hour ticks
-    for (let i = 0; i < days * 24; i++) {
-      set = tickPractices(set, MS_PER_HOUR);
-    }
+    // Full chronic load with erosionFactor 2.0 => effective cap = 24h / 3 = 8h
+    tickPractices(set, 0, makeWear(1.0), 2.0);
 
-    // integrityPractice: 0.5 + (-0.005 * 720 hours) = -3.1 → clamped to 0
-    expect(set.practices.get("integrityPractice")!.depth).toBe(0);
-
-    // gratitudePractice: 0.3 + (-0.008 * 720 hours) = -5.46 → clamped to 0
-    expect(set.practices.get("gratitudePractice")!.depth).toBe(0);
-  });
-
-  it("7-day run shows partial decay", () => {
-    let set = makeSet();
-    // 7 days = 168 hours
-    for (let i = 0; i < 168; i++) {
-      set = tickPractices(set, MS_PER_HOUR);
-    }
-
-    // integrityPractice: 0.5 + (-0.005 * 168) = 0.5 - 0.84 = 0 (clamped)
-    // Actually 0.5 - 0.84 < 0, so clamped to 0
-    expect(set.practices.get("integrityPractice")!.depth).toBe(0);
-
-    // gratitudePractice: 0.3 + (-0.008 * 168) = 0.3 - 1.344 < 0
-    expect(set.practices.get("gratitudePractice")!.depth).toBe(0);
-  });
-
-  it("exponential-decay practice decays more slowly", () => {
-    const set = createPracticeSet({
-      seeds: [{ id: "creatorConnection", initialDepth: 0.8 }],
-    });
-
-    // creatorConnection has exponential decay with halfLife 168 hours (1 week)
-    let current = set;
-    for (let i = 0; i < 168; i++) {
-      current = tickPractices(current, MS_PER_HOUR);
-    }
-
-    // After 1 half-life: 0.8 * 0.5 = 0.4
-    expect(current.practices.get("creatorConnection")!.depth).toBeCloseTo(0.4, 2);
+    const remaining = set.practices.get("gratitudePractice")!.substrate.artifacts;
+    // Only 6h survives (< 8h)
+    expect(remaining).toHaveLength(1);
   });
 });

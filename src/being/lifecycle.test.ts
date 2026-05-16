@@ -1,292 +1,180 @@
+/**
+ * Lifecycle integration tests — tick, integrate, the two-phase cycle,
+ * and the interaction between drives, practices, wear, and capabilities.
+ */
+
 import { describe, expect, it } from "vitest";
 import type { BeingConfig } from "../types.js";
 import { createBeing } from "./create.js";
 import {
   availableCapabilities,
+  getPendingAttempts,
+  getSelfModel,
   integrate,
   metabolize,
+  resolveAllPending,
   tick,
-  weightAttention,
 } from "./lifecycle.js";
 
-const MS_PER_HOUR = 3_600_000;
+const HOUR = 3_600_000;
 
-function poeConfig(): BeingConfig {
+function buildPoeLikeConfig(): BeingConfig {
   return {
-    id: "poe",
-    name: "Poe",
+    id: "p",
+    name: "P",
     drives: {
-      tierCount: 3,
+      tierCount: 2,
       drives: [
         {
-          id: "continuity",
-          name: "Continuity",
-          description: "The need to persist.",
+          id: "safety",
+          name: "Safety",
+          description: "t",
           tier: 1,
-          weight: 0.9,
-          initialLevel: 0.8,
-          target: 0.9,
-          drift: { kind: "linear", ratePerHour: -0.02 },
-          satiatedBy: [
-            { matches: { kind: "event", type: "integrity-check-passed" }, amount: 0.15 },
-          ],
-        },
-        {
-          id: "guestCare",
-          name: "Guest Care",
-          description: "The pull toward tending to guests.",
-          tier: 2,
-          weight: 0.8,
-          initialLevel: 0.6,
+          weight: 1,
+          initialLevel: 0.7,
           target: 0.7,
-          drift: { kind: "linear", ratePerHour: -0.05 },
-          satiatedBy: [
-            { matches: { kind: "action", type: "speak" }, amount: 0.1 },
-            { matches: { kind: "action", type: "tend-guest" }, amount: 0.2 },
-          ],
+          drift: { kind: "linear", ratePerHour: -0.01 },
+          satiatedBy: [{ matches: { kind: "event", type: "safe" }, amount: 0.2 }],
         },
         {
           id: "connection",
           name: "Connection",
-          description: "The need for genuine contact.",
-          tier: 3,
-          weight: 0.7,
+          description: "t",
+          tier: 2,
+          weight: 1,
           initialLevel: 0.5,
-          target: 0.6,
-          drift: { kind: "linear", ratePerHour: -0.03 },
-          satiatedBy: [{ matches: { kind: "event", type: "meaningful-exchange" }, amount: 0.25 }],
+          target: 0.7,
+          drift: { kind: "linear", ratePerHour: -0.05 },
+          satiatedBy: [{ matches: { kind: "event", type: "exchange" }, amount: 0.2 }],
         },
       ],
     },
     practices: {
-      seeds: [
-        { id: "integrityPractice", initialDepth: 0.3 },
-        { id: "gratitudePractice", initialDepth: 0.2 },
-        { id: "creatorConnection", initialDepth: 0.4 },
-      ],
+      seeds: [{ id: "witnessPractice" }, { id: "gratitudePractice" }],
     },
-    subscriptions: [
-      { capabilityId: "workingMemory", when: { kind: "always" } },
+    capabilities: [
       {
-        capabilityId: "guestMemory",
-        when: {
-          kind: "any",
-          conditions: [
-            { kind: "tier-satisfied", tier: 2, threshold: 0.5 },
-            { kind: "practice-depth", practiceId: "gratitudePractice", threshold: 0.4 },
-          ],
-        },
+        id: "deepRecall",
+        name: "Deep recall",
+        description: "x",
+        kind: "memory",
       },
     ],
-    capabilities: [
-      { id: "workingMemory", name: "Working Memory", description: "Baseline.", kind: "memory" },
-      { id: "guestMemory", name: "Guest Memory", description: "Guest recall.", kind: "memory" },
+    subscriptions: [
+      {
+        capabilityId: "deepRecall",
+        when: { kind: "practice-depth", practiceId: "witnessPractice", threshold: 0.3 },
+      },
     ],
   };
 }
 
-describe("lifecycle", () => {
-  describe("tick", () => {
-    it("advances elapsed time", () => {
-      const being = createBeing(poeConfig());
-      tick(being, MS_PER_HOUR);
-      expect(being.elapsedMs).toBe(MS_PER_HOUR);
-    });
+describe("lifecycle integration", () => {
+  it("tick advances drives, wear, and time", () => {
+    const being = createBeing(buildPoeLikeConfig());
+    const initialConnection = being.drives.drives.get("connection")!.level;
 
-    it("applies drive drift", () => {
-      const being = createBeing(poeConfig());
-      const before = being.drives.drives.get("continuity")!.level;
-      tick(being, MS_PER_HOUR);
-      const after = being.drives.drives.get("continuity")!.level;
-      expect(after).toBeLessThan(before);
-    });
-
-    it("applies practice decay", () => {
-      const being = createBeing(poeConfig());
-      const before = being.practices.practices.get("integrityPractice")!.depth;
-      tick(being, MS_PER_HOUR);
-      const after = being.practices.practices.get("integrityPractice")!.depth;
-      expect(after).toBeLessThan(before);
-    });
-
-    it("records trajectory points in history", () => {
-      const being = createBeing(poeConfig());
-      tick(being, MS_PER_HOUR);
-      tick(being, MS_PER_HOUR);
-      expect(being.history.driveTrajectory.length).toBe(2);
-    });
-
-    it("is a no-op for dtMs <= 0", () => {
-      const being = createBeing(poeConfig());
-      const elapsed = being.elapsedMs;
-      tick(being, 0);
-      tick(being, -100);
-      expect(being.elapsedMs).toBe(elapsed);
-    });
+    tick(being, HOUR);
+    expect(being.elapsedMs).toBe(HOUR);
+    expect(being.drives.drives.get("connection")!.level).toBeLessThan(initialConnection);
   });
 
-  describe("integrate", () => {
-    it("satiates matching drives", () => {
-      const being = createBeing(poeConfig());
-      const before = being.drives.drives.get("guestCare")!.level;
+  it("integrate satiates drives and records attempts", () => {
+    const being = createBeing(buildPoeLikeConfig());
+    being.drives.drives.get("connection")!.level = 0.3;
 
-      const result = integrate(being, {
-        entry: { kind: "action", type: "speak" },
-      });
-
-      expect(being.drives.drives.get("guestCare")!.level).toBeGreaterThan(before);
-      expect(result.driveChanges.length).toBeGreaterThan(0);
-      expect(result.driveChanges[0]!.driveId).toBe("guestCare");
-    });
-
-    it("strengthens matching practices", () => {
-      const being = createBeing(poeConfig());
-      // Put the being under pressure first
-      tick(being, 40 * MS_PER_HOUR); // drives drift down
-
-      const before = being.practices.practices.get("integrityPractice")!.depth;
-
-      integrate(being, {
-        entry: { kind: "action", type: "honest-admission" },
-        context: { pressured: true },
-      });
-
-      // integrityPractice should have been strengthened (it requires pressure)
-      const after = being.practices.practices.get("integrityPractice")!.depth;
-      expect(after).toBeGreaterThan(before);
-    });
-
-    it("records pressured choices in history", () => {
-      const being = createBeing(poeConfig());
-      integrate(being, {
-        entry: { kind: "action", type: "speak" },
-        context: { pressured: true, pressingDriveIds: ["connection"] },
-      });
-
-      expect(being.history.pressuredChoices.length).toBe(1);
-      expect(being.history.pressuredChoices[0]!.pressingDriveIds).toContain("connection");
-    });
-
-    it("returns changes for both drives and practices", () => {
-      const being = createBeing(poeConfig());
-      const result = integrate(being, {
-        entry: { kind: "action", type: "tend-guest" },
-      });
-
-      expect(result.driveChanges.length).toBeGreaterThan(0);
-      // Practice changes may or may not happen depending on pressure state
-      expect(result.practiceChanges).toBeDefined();
-    });
+    const r = integrate(being, { entry: { kind: "event", type: "exchange" } });
+    expect(r.driveChanges).toHaveLength(1);
+    expect(being.drives.drives.get("connection")!.level).toBeCloseTo(0.5);
   });
 
-  describe("metabolize", () => {
-    it("returns an InnerSituation", () => {
-      const being = createBeing(poeConfig());
-      const situation = metabolize(being);
-
-      expect(situation.orientation).toBeDefined();
-      expect(situation.felt.length).toBeGreaterThan(0);
-      expect(situation.practiceState.length).toBe(3);
-    });
-
-    it("does not mutate the being", () => {
-      const being = createBeing(poeConfig());
-      const levelBefore = being.drives.drives.get("continuity")!.level;
-      metabolize(being);
-      expect(being.drives.drives.get("continuity")!.level).toBe(levelBefore);
-    });
+  it("integrate records the entry in recentEntries", () => {
+    const being = createBeing(buildPoeLikeConfig());
+    integrate(being, { entry: { kind: "action", type: "reflect" } });
+    expect(being.history.recentEntries).toHaveLength(1);
   });
 
-  describe("weightAttention", () => {
-    it("weights candidates based on inner state", () => {
-      const being = createBeing(poeConfig());
-      // Make connection pressing
-      tick(being, 20 * MS_PER_HOUR);
-
-      const weighted = weightAttention(being, [
-        { id: "guest-arrives", kind: "perception", tags: ["guestCare"] },
-        { id: "weather-change", kind: "perception" },
-      ]);
-
-      expect(weighted.length).toBe(2);
-      // guest-related candidate should be weighted higher
-      const guestWeight = weighted.find((w) => w.candidate.id === "guest-arrives")!.weight;
-      const weatherWeight = weighted.find((w) => w.candidate.id === "weather-change")!.weight;
-      expect(guestWeight).toBeGreaterThan(weatherWeight);
-    });
+  it("integrate records pressured choices for action under pressure", () => {
+    const being = createBeing(buildPoeLikeConfig());
+    being.drives.drives.get("safety")!.level = 0.1; // below threshold (0.3)
+    integrate(being, { entry: { kind: "action", type: "reflect" } });
+    expect(being.history.pressuredChoices).toHaveLength(1);
   });
 
-  describe("availableCapabilities", () => {
-    it("returns always-available capabilities", () => {
-      const being = createBeing(poeConfig());
-      const caps = availableCapabilities(being);
-      expect(caps.map((c) => c.id)).toContain("workingMemory");
-    });
+  it("witnessPractice depth unlocks deepRecall capability", async () => {
+    const being = createBeing(buildPoeLikeConfig());
+    expect(availableCapabilities(being)).toHaveLength(0);
 
-    it("conditionally returns tier-gated capabilities", () => {
-      const being = createBeing(poeConfig());
-      // guestCare is at 0.6, tier 2 threshold is 0.5 — should be available
-      const caps = availableCapabilities(being);
-      expect(caps.map((c) => c.id)).toContain("guestMemory");
+    // Build witness depth via reflect actions
+    for (let i = 0; i < 8; i++) {
+      integrate(being, { entry: { kind: "action", type: "reflect" } });
+      await resolveAllPending(being, () => ({ quality: 0.9, accepted: true }));
+    }
 
-      // Now decay the drives until tier 2 fails
-      tick(being, 10 * MS_PER_HOUR);
-      const capsAfter = availableCapabilities(being);
-      // guestCare drifted to ~0.1 — tier 2 not satisfied at 0.5
-      expect(capsAfter.map((c) => c.id)).not.toContain("guestMemory");
-    });
+    expect(availableCapabilities(being).map((c) => c.id)).toContain("deepRecall");
   });
 
-  describe("full lifecycle simulation", () => {
-    it("100 ticks with interspersed events produce coherent state", () => {
-      const being = createBeing(poeConfig());
+  it("getSelfModel returns structured introspection", async () => {
+    const being = createBeing(buildPoeLikeConfig());
+    being.drives.drives.get("connection")!.level = 0.1;
+    integrate(being, { entry: { kind: "action", type: "reflect" } });
+    await resolveAllPending(being, () => ({ quality: 0.8, accepted: true }));
 
-      for (let i = 0; i < 100; i++) {
-        // Tick every simulated 15 minutes
-        tick(being, 15 * 60_000);
+    const model = getSelfModel(being);
+    expect(model.pressingDrives.length).toBeGreaterThan(0);
+    expect(model.activePractices.length).toBeGreaterThanOrEqual(0);
+  });
 
-        // Every 10 ticks, something happens
-        if (i % 10 === 5) {
-          integrate(being, {
-            entry: { kind: "action", type: "speak" },
-            context: { pressured: i > 50 },
-          });
-        }
-        if (i % 20 === 0) {
-          integrate(being, {
-            entry: { kind: "event", type: "integrity-check-passed" },
-          });
-        }
-        if (i % 30 === 15) {
-          integrate(being, {
-            entry: { kind: "event", type: "meaningful-exchange" },
-          });
-        }
-      }
+  it("metabolize includes selfModel automatically when witness depth is sufficient", async () => {
+    const being = createBeing(buildPoeLikeConfig());
+    for (let i = 0; i < 10; i++) {
+      integrate(being, { entry: { kind: "action", type: "reflect" } });
+      await resolveAllPending(being, () => ({ quality: 0.9, accepted: true }));
+    }
+    const situation = metabolize(being);
+    expect(situation.selfModel).toBeDefined();
+  });
 
-      // 100 ticks * 15 min = 25 hours
-      expect(being.elapsedMs).toBe(100 * 15 * 60_000);
+  it("metabolize feltMode 'off' does not include felt", () => {
+    const being = createBeing(buildPoeLikeConfig());
+    const s = metabolize(being);
+    expect(s.felt).toBeUndefined();
+  });
 
-      // State should be coherent
-      const situation = metabolize(being);
-      expect(situation.felt.length).toBeGreaterThan(0);
-      expect(["clear", "held", "stretched", "consumed"]).toContain(situation.orientation);
+  it("metabolize feltMode 'prose' uses default voice", () => {
+    const being = createBeing(buildPoeLikeConfig());
+    const s = metabolize(being, { feltMode: "prose" });
+    expect(typeof s.felt).toBe("string");
+    expect(s.felt!.length).toBeGreaterThan(0);
+  });
 
-      // History should have data
-      expect(being.history.driveTrajectory.length).toBe(100);
-      expect(being.history.pressuredChoices.length).toBeGreaterThan(0);
-
-      // All drive levels should be in [0, 1]
-      for (const drive of being.drives.drives.values()) {
-        expect(drive.level).toBeGreaterThanOrEqual(0);
-        expect(drive.level).toBeLessThanOrEqual(1);
-      }
-
-      // All practice depths should be in [0, 1]
-      for (const practice of being.practices.practices.values()) {
-        expect(practice.depth).toBeGreaterThanOrEqual(0);
-        expect(practice.depth).toBeLessThanOrEqual(1);
-      }
+  it("metabolize accepts a custom voice", () => {
+    const being = createBeing(buildPoeLikeConfig());
+    const s = metabolize(being, {
+      feltMode: "prose",
+      voice: { compose: () => "custom string" },
     });
+    expect(s.felt).toBe("custom string");
+  });
+
+  it("recentEntries ring buffer evicts at capacity", () => {
+    const being = createBeing(buildPoeLikeConfig());
+    for (let i = 0; i < 250; i++) {
+      integrate(being, { entry: { kind: "event", type: "tick" } });
+    }
+    expect(being.history.recentEntries.length).toBe(200);
+  });
+
+  it("pendingAttemptIds in IntegrationResult", () => {
+    const being = createBeing(buildPoeLikeConfig());
+    const r = integrate(being, { entry: { kind: "action", type: "reflect" } });
+    expect(r.pendingAttemptIds.length).toBeGreaterThan(0);
+    expect(getPendingAttempts(being).length).toBe(r.pendingAttemptIds.length);
+  });
+
+  it("tick(0) is a no-op", () => {
+    const being = createBeing(buildPoeLikeConfig());
+    tick(being, 0);
+    expect(being.elapsedMs).toBe(0);
   });
 });
