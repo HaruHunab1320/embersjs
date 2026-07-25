@@ -13,6 +13,9 @@ import type {
   Artifact,
   AttemptResolution,
   Being,
+  DrainFailure,
+  DrainOptions,
+  DrainResult,
   PracticeAttempt,
   PracticeAttemptResult,
   PracticeSubstrate,
@@ -83,24 +86,77 @@ export function resolveAttempt(
 }
 
 /**
- * Drains all pending attempts using the supplied evaluator.
+ * The shared drain loop.
  *
- * Calls the evaluator for each pending attempt and resolves with the result.
- * Errors from the evaluator propagate; the corresponding attempt remains pending.
+ * Takes the resolver as a parameter so callers can supply a wrapped one —
+ * `lifecycle.resolveAllPending` passes its milestone-recording variant. This
+ * exists so there is exactly one drain implementation; a second copy would
+ * inevitably diverge on which resolver it called.
+ *
+ * Evaluators are usually model calls, which fail intermittently. A failure on
+ * one attempt does not abort the drain: that attempt is left pending (so a
+ * later drain can retry it) and reported in `failures`. Every other attempt
+ * still resolves.
+ *
+ * Set `concurrency` above 1 to evaluate attempts in parallel. Resolution
+ * itself stays serialized, so substrate ordering is deterministic given a
+ * deterministic evaluator.
  */
-export async function resolveAllPending(
+export async function drainPending(
   being: Being,
   evaluate: (attempt: PracticeAttempt) => PracticeAttemptResult | Promise<PracticeAttemptResult>,
-): Promise<AttemptResolution[]> {
+  resolveOne: (being: Being, attemptId: string, result: PracticeAttemptResult) => AttemptResolution,
+  options: DrainOptions = {},
+): Promise<DrainResult> {
   const pending = being.pendingAttempts.filter((a) => a.status === "pending");
-  const resolutions: AttemptResolution[] = [];
+  if (pending.length === 0) return { resolutions: [], failures: [] };
 
-  for (const attempt of pending) {
-    const result = await evaluate(attempt);
-    resolutions.push(resolveAttempt(being, attempt.id, result));
+  const concurrency = Math.max(1, Math.floor(options.concurrency ?? 1));
+
+  // Phase 1 — evaluate (parallelizable, no mutation).
+  type Verdict = { ok: true; value: PracticeAttemptResult } | { ok: false; error: unknown };
+  const verdicts: Verdict[] = new Array(pending.length);
+  let cursor = 0;
+
+  async function worker(): Promise<void> {
+    while (cursor < pending.length) {
+      const index = cursor++;
+      const attempt = pending[index]!;
+      try {
+        verdicts[index] = { ok: true, value: await evaluate(attempt) };
+      } catch (error) {
+        verdicts[index] = { ok: false, error };
+      }
+    }
   }
 
-  return resolutions;
+  await Promise.all(Array.from({ length: Math.min(concurrency, pending.length) }, () => worker()));
+
+  // Phase 2 — apply (serialized, in the original attempt order).
+  const resolutions: AttemptResolution[] = [];
+  const failures: DrainFailure[] = [];
+
+  for (let i = 0; i < pending.length; i++) {
+    const attempt = pending[i]!;
+    const verdict = verdicts[i]!;
+
+    if (!verdict.ok) {
+      failures.push({
+        attemptId: attempt.id,
+        practiceId: attempt.practiceId,
+        error: verdict.error,
+      });
+      continue;
+    }
+
+    try {
+      resolutions.push(resolveOne(being, attempt.id, verdict.value));
+    } catch (error) {
+      failures.push({ attemptId: attempt.id, practiceId: attempt.practiceId, error });
+    }
+  }
+
+  return { resolutions, failures };
 }
 
 function appendArtifact(substrate: PracticeSubstrate, artifact: Artifact): PracticeSubstrate {

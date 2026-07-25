@@ -165,9 +165,14 @@ Two-phase auxiliaries for practice cultivation:
 |---|---|
 | `getPendingAttempts(being)` | Read pending practice attempts |
 | `resolveAttempt(being, id, result)` | Apply a quality verdict |
-| `resolveAllPending(being, evaluator)` | Drain the queue with a supplied function |
+| `resolveAllPending(being, evaluator, opts?)` | Drain the queue with a supplied function |
 | `getSelfModel(being)` | Structured introspection (when witness has earned it) |
-| `expirePendingAttempes(being, olderThanMs)` | Drop stale unresolved attempts |
+| `expirePendingAttempts(being, olderThanMs)` | Drop stale unresolved attempts |
+| `applyState(fresh, restored)` | Transplant persisted state onto a rebuilt being |
+
+`resolveAllPending` returns `{ resolutions, failures }`. An evaluator that throws
+does not abort the drain — that attempt stays pending for a later retry and lands
+in `failures`. Pass `{ concurrency: n }` to evaluate in parallel.
 
 ---
 
@@ -196,11 +201,13 @@ Two-phase auxiliaries for practice cultivation:
 
 **Integration:**
 - [Generic framework guide](docs/integration/generic.md)
+- [Act detection](docs/integration/act-detection.md) — deciding an act occurred, before scoring it
 
 **Examples:**
 - [`examples/minimum.ts`](examples/minimum.ts) — smallest working being
 - [`examples/poe.ts`](examples/poe.ts) — a hotel concierge, 7-day simulation with isolation + recovery
 - [`examples/librarian.ts`](examples/librarian.ts) — a quieter being with deep prior cultivation
+- [`examples/act-detection.ts`](examples/act-detection.ts) — ablation: does your evaluator actually do anything?
 
 ---
 

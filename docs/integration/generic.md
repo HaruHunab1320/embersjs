@@ -165,6 +165,74 @@ async function evaluator(attempt: PracticeAttempt): Promise<PracticeAttemptResul
 }
 ```
 
+### What evaluation costs
+
+Every matched trigger becomes an attempt, and every attempt an evaluator call. If your evaluator is a model call, this is the dominant cost in the integration and it scales with trigger volume, not with how interesting the moment was. Budget it deliberately.
+
+Count before you build. Attempts per tick is roughly:
+
+```
+(triggers whose matcher fires this tick) × (beings in the simulation)
+```
+
+A five-being simulation where each tick fires two ungated triggers per being is ten evaluator calls per tick. At one tick per simulated minute that is not a background cost — it is the simulation's cost.
+
+Four levers, in the order worth reaching for:
+
+**1. Gate triggers on pressure.** `requiresPressure: true` is the cheapest filter and the most principled one: choosing integrity when it costs nothing is not integrity. Most of the shipped triggers on `integrityPractice` and `presencePractice` require pressure for exactly this reason. Ungated triggers on high-frequency entry types (a per-tick `quiet-moment`) are the usual source of a runaway bill.
+
+**2. Raise concurrency.** Drain latency, not token count, is usually what makes a loop feel slow:
+
+```ts
+const { resolutions, failures } = await resolveAllPending(being, evaluator, {
+  concurrency: 4,
+});
+```
+
+Evaluation runs in parallel; resolution stays serialized, so substrate order is deterministic. This cuts wall-clock, not spend.
+
+**3. Route by practice.** Reserve model calls for the practices whose quality judgment genuinely needs a model. `witnessPractice` and `creatorConnection` reward it; a `gratitudePractice` acknowledgement often does not. See *Mixed strategies* above.
+
+**4. Sample, and be honest that you did.** Under load, evaluate a subset and let the rest expire unresolved:
+
+```ts
+const pending = getPendingAttempts(being);
+const budget = 3;
+
+// Prefer pressured attempts — they carry the pressure bonus and are the ones
+// that actually distinguish cultivation from routine.
+const ranked = [...pending].sort(
+  (a, b) => Number(b.underPressure) - Number(a.underPressure),
+);
+
+for (const attempt of ranked.slice(0, budget)) {
+  resolveAttempt(being, attempt.id, await evaluator(attempt));
+}
+expirePendingAttempts(being, 6 * 3_600_000);
+```
+
+Sampling biases depth downward — unevaluated attempts contribute nothing, which is the library working as designed. That is a real cost, not a free optimization: a being whose attempts are mostly dropped will read as less cultivated than it earned. Prefer levers 1–3 first.
+
+**Do not** fabricate verdicts to avoid the cost. A hardcoded `{ quality: 0.8, accepted: true }` reproduces the exact v0.1 failure mode this design exists to close — depth accumulating from event labels with no cognitive work behind it. If you cannot afford to evaluate a practice, seed fewer practices instead.
+
+### Handling drain failures
+
+Model calls fail. `resolveAllPending` isolates failures rather than aborting:
+
+```ts
+const { resolutions, failures } = await resolveAllPending(being, evaluator, {
+  concurrency: 4,
+});
+
+for (const f of failures) {
+  logger.warn(`evaluation failed for ${f.practiceId}`, f.error);
+}
+```
+
+A failed attempt stays pending, so the next drain retries it. That is the desired behavior for a transient timeout and a slow leak for a persistent one — pair it with `expirePendingAttempts` so permanently-failing attempts eventually clear.
+
+Note that a *rejected* verdict (`accepted: false`) is not a failure. It is the evaluator doing its job: the attempt resolves, no artifact is stored, depth does not grow.
+
 ## Step 6: Assembling prompts
 
 The structured `InnerSituation` is the deliverable. Different framework styles use it differently.
@@ -315,15 +383,29 @@ const saved = JSON.parse(await yourStore.load(being.id));
 const restored = deserializeBeing(saved);
 ```
 
-**Caveat:** matcher predicates and custom drift/depth functions do not serialize. After deserialization, predicates are gone and custom functions become no-ops. If you use predicates or custom functions, the recommended pattern is:
+**Caveat:** matcher predicates and custom drift/depth functions do not serialize. After deserialization, predicates are gone and custom functions become no-ops — a being whose drives silently never satiate. Use `applyState` to transplant the persisted state onto a being rebuilt from the original config:
 
 ```ts
-const fresh = createBeing(originalConfig);  // restores predicates and custom functions
-const restored = deserializeBeing(saved);   // restores state
-// Merge: copy restored state into fresh — drives.levels, practice substrates,
-// wear, history, pendingAttempts, elapsedMs.
-applyState(fresh, restored);  // your helper
+import { applyState, createBeing, deserializeBeing } from "@embersjs/core";
+
+const fresh = createBeing(originalConfig);  // live predicates and custom functions
+const restored = deserializeBeing(saved);   // real state, dead functions
+const report = applyState(fresh, restored); // live functions, real state
+
+// `fresh` is now the being to use. `restored` was only a state carrier.
 ```
+
+The split is mechanical: drive levels, practice substrate, wear, pending attempts, history, and `elapsedMs` are copied; ids, tiers, weights, targets, drift functions, satiation bindings, protocols, capabilities, subscriptions, and metadata come from the config.
+
+If the config changed since the snapshot was written, state referencing entities that no longer exist is dropped rather than invented — and reported, so it doesn't vanish silently:
+
+```ts
+if (report.skippedDrives.length || report.skippedPractices.length) {
+  console.warn("config drift", report.skippedDrives, report.skippedPractices);
+}
+```
+
+Skipping `applyState` and using the deserialized being directly is only safe if your config uses no predicates and no custom drift/depth functions.
 
 ## Memory and long-running beings
 
@@ -376,9 +458,13 @@ async function runOneCycle(input: { type: string; payload?: unknown }) {
 - **Routing resources without checking `availableCapabilities`.** You can technically give the being whatever you want — but if you ignore the capability layer, you're not using the architecture's anti-coercion design.
 - **Forgetting to `tick` between events.** Drives don't drift, wear doesn't update. The being is frozen in the moment of its last event.
 - **Marking everything `pressured: true` in `IntegrationInput.context`.** This makes every action a pressured choice and fires pressure-gated triggers indiscriminately. Let the library compute pressure from state when in doubt.
+- **Returning a constant verdict from the evaluator.** `() => ({ quality: 0.8, accepted: true })` is fine in tests and is label-counting in production — the exact v0.1 failure mode the two-phase mechanic exists to close. If a practice isn't worth evaluating, don't seed it.
+- **Using a deserialized being directly.** Predicates and custom functions don't survive serialization. Rebuild from config and `applyState` the snapshot onto it, or your drives will drift down and never satiate.
+- **Mapping structural events straight onto practice trigger types.** `agentSpoke → honest-admission` grows integrity from the fact that speech occurred. See [act detection](./act-detection.md).
 
 ## See also
 
+- [Act detection](./act-detection.md) — how to decide an act occurred before evaluating its quality
 - [Architecture](../ARCHITECTURE.md) — full type spec
 - [Practices](../authoring/practices.md) — designing what your evaluator evaluates
 - Examples in [`examples/`](../../examples/)

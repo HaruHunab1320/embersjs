@@ -1,3 +1,5 @@
+export type { ApplyStateResult } from "./apply-state.js";
+export { applyState } from "./apply-state.js";
 export { createBeing } from "./create.js";
 export { describe } from "./describe.js";
 export {

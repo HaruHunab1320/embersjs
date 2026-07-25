@@ -30,13 +30,15 @@ import {
   recordAttempts,
 } from "../practices/attempt.js";
 import { computeDepth } from "../practices/depth.js";
-import { resolveAttempt as resolveAttemptInner } from "../practices/resolve.js";
+import { drainPending, resolveAttempt as resolveAttemptInner } from "../practices/resolve.js";
 import { tickPractices } from "../practices/tick.js";
 import type {
   AttemptResolution,
   AttentionCandidate,
   Being,
   Capability,
+  DrainOptions,
+  DrainResult,
   InnerSituation,
   IntegrationInput,
   IntegrationResult,
@@ -215,20 +217,19 @@ export function resolveAttempt(
 /**
  * Drains all pending practice attempts using the supplied evaluator.
  *
- * Calls `resolveAttempt` for each pending attempt with the evaluator's result.
- * **Mutates** the being.
+ * Calls `resolveAttempt` for each pending attempt with the evaluator's result,
+ * so practice milestones are recorded. **Mutates** the being.
+ *
+ * An evaluator that throws does not abort the drain — that attempt stays
+ * pending and is reported in `failures`, and the rest still resolve. Pass
+ * `{ concurrency }` to evaluate attempts in parallel.
  */
 export async function resolveAllPending(
   being: Being,
   evaluate: (attempt: PracticeAttempt) => PracticeAttemptResult | Promise<PracticeAttemptResult>,
-): Promise<AttemptResolution[]> {
-  const pending = getPendingAttemptsInner(being);
-  const resolutions: AttemptResolution[] = [];
-  for (const attempt of pending) {
-    const result = await evaluate(attempt);
-    resolutions.push(resolveAttempt(being, attempt.id, result));
-  }
-  return resolutions;
+  options: DrainOptions = {},
+): Promise<DrainResult> {
+  return drainPending(being, evaluate, resolveAttempt, options);
 }
 
 /**

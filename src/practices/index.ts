@@ -25,6 +25,6 @@ export {
   practiceDepth,
   practicesByDepth,
 } from "./query.js";
-export { resolveAllPending, resolveAttempt } from "./resolve.js";
+export { drainPending, resolveAttempt } from "./resolve.js";
 export { DEFAULT_HARD_AGE_CAP_MS, tickPractices } from "./tick.js";
 export { triggerMatches } from "./triggers.js";

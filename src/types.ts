@@ -364,6 +364,40 @@ export interface AttemptResolution {
   readonly depthAfter: number;
 }
 
+/**
+ * An attempt that could not be resolved because the evaluator threw.
+ *
+ * The attempt stays pending, so a later drain retries it. Persistently
+ * failing attempts are eventually cleared by `expirePendingAttempts`.
+ */
+export interface DrainFailure {
+  readonly attemptId: string;
+  readonly practiceId: string;
+  /** Whatever the evaluator threw. */
+  readonly error: unknown;
+}
+
+/** Tuning for `resolveAllPending`. */
+export interface DrainOptions {
+  /**
+   * How many attempts to evaluate in parallel. Defaults to 1 (serial).
+   * Evaluators are typically model calls; raising this is the main lever on
+   * drain latency. Resolution stays serialized regardless.
+   */
+  readonly concurrency?: number;
+}
+
+/**
+ * The outcome of draining pending attempts.
+ *
+ * A non-empty `failures` array is normal when evaluators are model calls —
+ * it is information, not an exception.
+ */
+export interface DrainResult {
+  readonly resolutions: readonly AttemptResolution[];
+  readonly failures: readonly DrainFailure[];
+}
+
 // ---------------------------------------------------------------------------
 // Wear — chronic state tracking and the path back up
 // ---------------------------------------------------------------------------

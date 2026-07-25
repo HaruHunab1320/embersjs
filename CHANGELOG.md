@@ -53,6 +53,23 @@ foundation. Consumers must migrate. See `docs/design/v0.2/foundation.md`.
 - **`expirePendingAttempts(being, olderThanMs)`** — opt-in cleanup helper
   for long-running beings whose framework doesn't resolve every attempt.
   Returns the number of attempts removed.
+- **`applyState(target, source)`** and `ApplyStateResult`. Transplants
+  persisted state onto a being rebuilt from config, restoring the matcher
+  predicates and custom drift/depth functions that serialization strips.
+  Previously the docs described this helper and left consumers to write it.
+  State referencing drives or practices the current config no longer defines
+  is skipped and reported rather than silently dropped.
+- **Failure isolation and concurrency in `resolveAllPending`.** An evaluator
+  that throws no longer aborts the drain — the attempt stays pending for a
+  later retry and is reported in `failures`. `{ concurrency: n }` evaluates
+  attempts in parallel while keeping resolution serialized, so substrate
+  order stays deterministic.
+- **`docs/integration/act-detection.md`.** The step before evaluation: how a
+  framework decides an act occurred without reintroducing label-counting one
+  layer up. Covers self-report, classifier, and state-difference strategies,
+  and the ablation that tells you whether your evaluator does anything.
+- **`examples/act-detection.ts`.** Runnable ablation — the same event stream
+  under a rubber-stamp evaluator and a strict one. No API key required.
 - **v0.2 documentation pass.** New README, `docs/ARCHITECTURE.md`,
   `docs/ROADMAP.md`, `docs/authoring/{drives,practices,capabilities}.md`,
   `docs/integration/generic.md`, `docs/design/{rationale,four-quadrants}.md`.
@@ -84,6 +101,14 @@ foundation. Consumers must migrate. See `docs/design/v0.2/foundation.md`.
 - **`metabolize()` returns restructured `InnerSituation`** — drives,
   practices, capabilities, orientation, wear, optional selfModel, optional felt.
 - **`integrate()` returns `pendingAttemptIds`** in `IntegrationResult`.
+- **`resolveAllPending()` returns `DrainResult`** (`{ resolutions, failures }`)
+  rather than a bare array, and takes an optional `DrainOptions`. New public
+  types: `DrainResult`, `DrainFailure`, `DrainOptions`.
+- **The drain loop is defined once.** `resolveAllPending` in `lifecycle` and
+  `resolveAllPending` in `practices/resolve` were separate implementations,
+  and the latter called the non-milestone-recording resolver. Both now route
+  through `drainPending(being, evaluate, resolveOne, options)`, which takes
+  the resolver as a parameter.
 - **`InnerSituation.drives` includes raw weighted pressure** (`pressure`)
   and a `chronic` flag, no longer "feltPressure" after dampening.
 - **`PracticeSummary` includes `recentSubstrate`** (top N artifacts) and

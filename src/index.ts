@@ -23,8 +23,9 @@
 // Construction & lifecycle
 // ---------------------------------------------------------------------------
 
-export type { SerializedBeing } from "./being/index.js";
+export type { ApplyStateResult, SerializedBeing } from "./being/index.js";
 export {
+  applyState,
   availableCapabilities,
   buildSelfModel,
   createBeing,
@@ -154,6 +155,9 @@ export type {
   CustomPracticeConfig,
   DepthFunction,
   DominationRules,
+  DrainFailure,
+  DrainOptions,
+  DrainResult,
   DriftFunction,
   Drive,
   DriveConfig,
