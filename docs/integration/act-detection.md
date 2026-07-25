@@ -161,7 +161,11 @@ Detection quality is measurable without ground truth. Three checks, in order of 
 |---|---|
 | >90% | The evaluator is a rubber stamp, or emission is too conservative to be interesting |
 | 20–60% | Healthy — candidates are genuinely being adjudicated |
-| <5% | Emission is too generous, or the evaluator's bar is set past what any agent produces |
+| <5% | Emission is too generous, the bar is past what any agent produces, or **the evaluator is broken** |
+
+That last cell is the one that will bite you. A near-zero acceptance rate looks like rigour and is usually a defect, because every failure mode in an evaluator resolves to a rejection: unparseable output, a truncated response, an expired key, a nomination that forgot to attach its evidence. Depth stays flat either way. Before concluding that your agent simply never practices, log the actual quality scores and confirm the evaluator can accept anything at all — feed it a handful of unambiguous instances and check they clear the threshold.
+
+A related trap: models answer quality in one-decimal steps, so scores cluster on the boundaries of whatever rubric you give them. If your accept threshold sits exactly on a band edge, ordinary sampling variance will flip identical evidence between accept and reject. Put the threshold between bands.
 
 **Depth trajectory.** Plot practice depth over a long run. Cultivation should be uneven — plateaus, occasional jumps, decay during fallow stretches. Smooth monotonic growth means depth is tracking event volume, which is label-counting with a verdict bolted on.
 

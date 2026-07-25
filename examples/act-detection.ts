@@ -254,12 +254,31 @@ console.log(line("rubber stamp", stamped));
 console.log(line("strict", judged));
 
 const ratio = stamped.depth === 0 ? 0 : judged.depth / stamped.depth;
-console.log(`\nStrict depth is ${(ratio * 100).toFixed(0)}% of rubber-stamp depth.`);
+const acceptRate = judged.accepted / (judged.accepted + judged.rejected);
+console.log(
+  `\nStrict depth is ${(ratio * 100).toFixed(0)}% of rubber-stamp depth; acceptance ${(acceptRate * 100).toFixed(0)}%.`,
+);
 
-if (ratio > 0.8) {
+// Both ends are failures. An evaluator that accepts everything is a rubber
+// stamp; one that accepts nothing is a rubber stamp pointed the other way,
+// and it fails *quietly* — a broken evaluator (unparseable output, a dead
+// API key, a nomination missing its evidence) is indistinguishable from a
+// rigorous one if you only look at whether depth stayed low.
+if (acceptRate > 0.9) {
+  console.log(
+    "\nFAIL — the evaluator accepts nearly everything. Depth is tracking event\n" +
+      "volume, not cultivation. This is v0.1 semantics with extra steps.",
+  );
+} else if (acceptRate < 0.05) {
+  console.log(
+    "\nFAIL — the evaluator accepts nothing, so depth can never grow. Check that\n" +
+      "verdicts parse and that evidence is reaching the evaluator before concluding\n" +
+      "the agent simply never practices.",
+  );
+} else if (ratio > 0.8) {
   console.log(
     "\nFAIL — the evaluator barely changed the outcome. Depth is tracking event\n" +
-      "volume, not cultivation. This is v0.1 semantics with extra steps.",
+      "volume, not cultivation.",
   );
 } else {
   console.log(
