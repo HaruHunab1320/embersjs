@@ -193,6 +193,7 @@ in `failures`. Pass `{ concurrency: n }` to evaluate in parallel.
 - [Design rationale](docs/design/rationale.md) — why the library is shaped this way
 - [v0.2 foundation](docs/design/v0.2/foundation.md) — the rebuild design doc
 - [Four quadrants](docs/design/four-quadrants.md) — the canonical frame for being state
+- [Motivation](docs/design/motivation.md) — findings: why drives currently modulate expression rather than action
 
 **Authoring:**
 - [Drives](docs/authoring/drives.md)
