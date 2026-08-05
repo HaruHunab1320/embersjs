@@ -20,13 +20,35 @@ no place in the architecture where pressure becomes a commitment, and therefore
 no place where a being can be *doing something* — which is the precondition for
 both acting unprompted and declining to react.
 
-v0.3 adds that place. A drive under pressure **nominates** a candidate intention.
-The framework **adjudicates** whether to commit. A committed intention persists,
-is acted toward over many ticks, and terminates in a recorded way.
+v0.3 adds that place, as **three states rather than two**:
+
+| State | What it does | Exists in v0.2? |
+|---|---|---|
+| **Latent** | Pressure biases attention, gates capabilities, colors tone. Never articulated. | **Yes** |
+| **Surfaced** | The impulse becomes an object the being can consider. It acquires an `aim`. | No |
+| **Committed** | Taken up as a standing intention, acted toward, terminated in a recorded way. | No |
+
+This is a correction to an earlier finding. "Drives modulate expression, not
+action" identified a real defect, but misdiagnosed it: modulation is not the
+error. Latent pressure shaping behavior without being articulated is the lower
+layer working correctly, and v0.2 already implements it. The error is that
+nothing sits above it.
+
+So v0.3 **adds one layer, not two**, and preserves existing drive behavior rather
+than replacing it. That is a considerably safer refactor than a design which
+turns modulation into commitment.
 
 The principle is unchanged: **Embers signals. The framework cognizes. Embers
 integrates.** Embers does not decide what a being should do, any more than it
 decides whether a practice attempt was genuine.
+
+### A note on naming
+
+The states are `latent`, `surfaced` and `committed` — never "unconscious" or
+"conscious." The mechanical words say the same thing without smuggling in a claim
+about phenomenology, and this is precisely the place where the discipline rule in
+`hauntjs/docs/COGNITION.md` would otherwise be violated: a concept kept for how
+it sounds rather than for the mechanism it names.
 
 ---
 
@@ -49,11 +71,17 @@ repetition is the argument for it being a primitive rather than a coincidence:
 | `integrate()` records a practice attempt | framework scores quality | no artifact, no depth |
 | a sensor emits an observation | the fold derives belief | no belief |
 | an event might warrant a memory | the write path judges | no memory formed |
-| **a drive nominates an intention** | **the framework commits or declines** | **no commitment** |
+| **a surfaced impulse** | **the framework commits or declines** | **no commitment** |
 
 Rejection is the detector, again. Most impulses should not become commitments —
-and a being that commits to everything a drive suggests is not motivated, it is
+and a being that commits to everything that surfaces is not motivated, it is
 compulsive.
+
+Note that with three states there are now **two** filters, not one, and they
+reject for different reasons. Most latent pressure never surfaces at all; of what
+surfaces, most is declined. A being whose every pressure both surfaces and
+commits has no interior — everything it feels immediately becomes something it is
+doing.
 
 ---
 
@@ -74,15 +102,42 @@ export interface Satisfier {
   params?: Record<string, unknown>;
 }
 
+/** Why a latent pressure became available for consideration. */
+export type SurfacingTrigger =
+  | { kind: "coincidence"; note: string }  // the satisfier appeared in perception
+  | { kind: "quiet" }                       // nothing was demanding attention
+  | { kind: "threshold" };                  // pressure alone was sufficient
+
+/**
+ * A latent pressure that has become an object the being can consider.
+ * Not yet a commitment — the being has noticed it wants something.
+ */
+export interface SurfacedCandidate {
+  id: string;
+  /** The drive it arose from. The attribution link. */
+  sourceDriveId: string;
+  /** What would discharge it. Constitutional — the drive owns this. */
+  satisfier: Satisfier;
+  /**
+   * What the being takes itself to want, in its own words.
+   *
+   * Authored by the framework at the moment of surfacing, not declared on the
+   * drive. Putting words to pressure is the cognitive act that surfacing *is*.
+   */
+  aim: string;
+  surfacedAtMs: number;
+  trigger: SurfacingTrigger;
+}
+
 /** A standing commitment to act. Not a plan, and not a goal. */
 export interface Intention {
   id: string;
-  /** What the being has committed to, in its own terms. Model-readable. */
+  /** Carried from the candidate this was committed from. */
   aim: string;
-  /** The drive that nominated it. This is the attribution link. */
   sourceDriveId: string;
-  /** What would discharge it. */
   satisfier: Satisfier;
+  /** The candidate this came from, so the surfacing reason stays reachable. */
+  fromCandidateId: string;
   formedAtMs: number;
   /** Actions taken toward it so far. Feeds urgency decay. */
   attempts: number;
@@ -127,12 +182,40 @@ pursuing something whose drive was satisfied ten minutes ago by other means. Tha
 is the same defect as storing depth instead of deriving it, and this library
 already knows better.
 
+### Who authors what
+
+The split that resolves the authorship question:
+
+| | Owner | Why |
+|---|---|---|
+| **Satisfier** | the drive, statically | Constitutional. A being does not choose that food is what fixes hunger. |
+| **Aim** | the framework, at surfacing | Articulating pressure is a cognitive act, and the only one in this design that warrants a model call. |
+
+Two consequences worth naming.
+
+**The model call is cheap because surfacing is rare.** Authoring an aim at every
+threshold crossing would be ruinous; authoring one when something surfaces is
+not. It also removes the canned-aim problem — aims are written in context rather
+than declared once in a config, so they vary with the situation that produced
+them.
+
+**The articulation can be wrong, for free.** The framework names what the being
+takes itself to want; the drive owns what would actually discharge the pressure.
+When those diverge, the being pursues its satisfier, the pressure does not drop,
+and it has misidentified its own want. Nothing needs to be built for this — it
+falls out of splitting authorship, and it is among the most lifelike behaviors
+the design can produce.
+
 ### Intention state is a fold
 
 Intentions are derived from a log, never mutated in place:
 
-`intention.nominated` · `intention.committed` · `intention.declined` ·
+`intention.surfaced` · `intention.committed` · `intention.declined` ·
 `intention.acted` · `intention.ended`
+
+Latent pressure is deliberately **not** logged. It is continuous, and it is
+already derivable from drive level — a log entry per tick per drive would be
+noise that buys nothing.
 
 Current intentions are the fold of that log. This buys the property the whole
 design exists for: *when did it decide that, and on what basis* is answerable by
@@ -152,18 +235,65 @@ guard against the first version quietly becoming a planner.
 ## Lifecycle
 
 ```
-drive pressure crosses threshold
-  └─ Embers nominates a candidate intention (drive supplies aim + satisfier)
-       └─ framework adjudicates                        ← THE GAP
-            ├─ decline  → recorded, nothing else happens
-            └─ commit   → intention persists
-                 └─ framework acts toward it over many ticks
-                      └─ ends: satisfied | abandoned | superseded | expired
+LATENT — drive presses continuously
+  │  biases attention, gates capabilities, colors tone
+  │  (v0.2 behavior, unchanged, and most pressure never leaves this state)
+  │
+  └─ a surfacing trigger fires
+       └─ framework authors an aim               ← THE ARTICULATION
+            │
+       SURFACED — the being has noticed it wants something
+            │
+            └─ framework adjudicates             ← THE GAP
+                 ├─ decline → recorded, being returns to acting from latent pressure
+                 └─ commit
+                      │
+                 COMMITTED — a standing intention
+                      └─ acted toward over many ticks
+                           └─ ends: satisfied | abandoned | superseded | expired
 ```
 
 Every terminal state is recorded with its reason. An intention that quietly
 vanishes is a hole in the attribution chain, which is the one thing this design
 cannot tolerate.
+
+A decline is not a failure state. The being goes on being shaped by the pressure
+— it simply is not *pursuing* it. That distinction is the whole point of having
+three states instead of two.
+
+## What makes a pressure surface
+
+Embers signals that a pressure is eligible to surface; it does not author the
+aim. Three triggers, in the order they are worth building.
+
+**Perceptual coincidence.** The satisfier appears in what the being is currently
+perceiving — the fire is visibly dying, and *that* is when tending it becomes
+thinkable. Grounded, cheap, and a better match for how attention actually works
+than a threshold is. The host detects this, since only the host knows what a
+satisfier refers to.
+
+**Quiet.** Nothing is demanding attention. This is the condition under which
+things surface unbidden, and it is exactly the Empty Room scenario — a being
+alone with nothing arriving is a being with room to notice what it wants.
+
+**Threshold.** Pressure alone is sufficient. Simple, and the least interesting,
+because it makes surfacing deterministic and proportional to pressure. Worth
+having as a floor so that severe unmet need always eventually surfaces.
+
+### The extension worth naming now
+
+**Witness practice should raise the surfacing rate.** Self-observation is, quite
+literally, how much of one's own motivation is visible — so witness depth
+modulating the probability that latent pressure surfaces is not a metaphor, it is
+the mechanism the practice already claims to be.
+
+This would give practice depth its first behavioral consequence. Under v0.2 a
+being cultivated witness for twelve utterances and nothing changed but tone,
+which is the finding that opened this design cycle.
+
+**Deferred from the thin slice** — it couples practices to intentions, and both
+should be proven alone first. It is the first extension to reach for once they
+are.
 
 ### Adjudication should be two-tier
 
@@ -194,14 +324,21 @@ v0.3 adds the addressable form:
 
 ```ts
 pursuableBy?: Array<{
-  aim: string;            // "tend the fire"
-  satisfier: Satisfier;   // opaque token the host resolves
-  threshold?: number;     // pressure above which this nominates; defaults per-drive
+  /** Opaque token the host resolves. Constitutional — not authored per-instance. */
+  satisfier: Satisfier;
+  /** Pressure above which this is eligible to surface. Defaults per-drive. */
+  threshold?: number;
+  /**
+   * Optional context for whoever authors the aim. NOT the aim itself —
+   * a static aim string is what this design exists to avoid.
+   */
+  hint?: string;
 }>;
 ```
 
 Optional, so existing beings are unaffected — a drive with no `pursuableBy` still
-presses and still colors state, exactly as now. It simply never nominates.
+presses and still colors state, exactly as now. It simply stays latent forever,
+which is the correct default and describes most drives most of the time.
 
 ---
 
@@ -234,6 +371,9 @@ Constraints:
 - **Memory consolidation changes.** Separate concern, later.
 - **Intention learning.** Nothing adapts thresholds from outcomes yet. The data
   to do so later is recorded from day one.
+- **Witness coupled to surfacing.** Named in full above because it is the first
+  extension worth building, and explicitly out of this slice because it couples
+  two unproven systems.
 
 ---
 
@@ -250,6 +390,13 @@ Mitigations:
 - Record declines as richly as commits. If the adjudicator is wrong, the evidence
   of *how* it was wrong should already be in the log.
 
+**Surfacing rate is the parameter most likely to be wrong first.** Too high and
+the being narrates every passing pressure, which is the interior-free failure
+above. Too low and it never wants anything and the layer looks broken when it is
+merely quiet. This wants to be instrumented and tunable from the first run rather
+than discovered by reading transcripts — log surfacings per hour alongside
+commits and declines.
+
 **The failure mode to watch for:** intentions that only ever reach the prompt as
 extra text. That reproduces the exact defect this document exists to correct. The
 host-side test is whether a committed intention changes control flow — see the
@@ -260,14 +407,20 @@ inside one.
 
 ## Open questions
 
-1. **Who authors `aim`?** A drive-level string is static and will read as
-   canned across a long run. A model-generated aim at nomination time is
-   expressive and costs a call at the highest-frequency point in the system.
-   Leaning static for the thin slice, with the field shaped so it can become
-   dynamic without a migration.
+1. ~~**Who authors `aim`?**~~ **Settled.** The drive owns the satisfier; the
+   framework authors the aim at surfacing. The cost objection dissolved once
+   surfacing became a distinct, rare state rather than a synonym for threshold
+   crossing.
 2. **Should a satisfied intention feed the practice substrate?** Pursuing
    something under pressure and discharging it looks like cultivation. Deferred —
-   it couples two systems that should be proven separately first.
+   it couples two systems that should be proven separately first. Note that the
+   witness-raises-surfacing extension is the *reverse* coupling, and is the more
+   promising of the two.
 3. **Expiry policy.** Age-based, attempt-based, or urgency-floor. Attempt-based
    is most honest (a commitment repeatedly failed should lapse) but needs the
    host to report attempts accurately.
+4. **Should surfaced-but-declined candidates be remembered?** A being that
+   declines the same impulse repeatedly is exhibiting something — either good
+   judgment or avoidance, and the two look identical from one instance. The rule
+   tier already needs recent declines to avoid re-adjudicating; whether that
+   history should be legible to the being itself is a different question.
