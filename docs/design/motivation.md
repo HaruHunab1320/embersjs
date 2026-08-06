@@ -201,8 +201,12 @@ Stated because a findings document reads as a list of defects otherwise.
 
 1. Drives modulate expression, not action. `satiatedBy` is receivable, not
    pursuable — the agent cannot derive an action that would satisfy it.
-2. State is half-folded. Practices derive; drives and wear mutate in place and
-   are therefore unattributable.
+2. ~~State is half-folded.~~ **Revised in v0.3 after the golden tests.** Practices
+   fold because artifacts are discrete; drives should not, because drift is a
+   continuous ambient process and faithful replay would need a log entry per
+   tick. The real defect is narrower: drives and wear record no *causal* history,
+   only sampled levels. Fold discrete state; sample continuous state and log its
+   discontinuities.
 3. Clamped non-commutativity in drive levels is a live test case for the
    change-record spec, cheap to resolve before a freeze.
 4. Wear measures the width of a gap that has not been built.

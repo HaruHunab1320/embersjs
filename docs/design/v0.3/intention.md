@@ -344,17 +344,92 @@ which is the correct default and describes most drives most of the time.
 
 ## The drive-state refactor
 
-Drive level becomes a fold over satiation and drift events rather than a mutated
-scalar, for one reason: **the attribution chain is only as good as its weakest
-hop.** "Why did it do that" → an intention → a drive at 0.3 → *dead end* is not
-legibility, and it is the state we are in today.
+> **Revised after writing the golden tests. The original proposal — "drive level
+> becomes a fold" — is withdrawn.** The reasoning is below; the goal it served is
+> unchanged and is met a different way.
 
-Constraints:
+The goal stands: **the attribution chain is only as good as its weakest hop.**
+"Why did it do that" → an intention → a drive at 0.3 → *dead end* is not
+legibility, and it is where we are today.
+
+### Why folding drive level is the wrong instrument
+
+Four steps, and the first came out of the goldens rather than out of design:
+
+1. **The fold would have to replay incrementally.** Closed-form reconstruction
+   crosses thresholds at different times than the incremental path (see below).
+2. **Faithful incremental replay needs a log entry per tick.** The result depends
+   on the exact sequence of `dtMs` values, so nothing smaller reconstructs it.
+3. **That log is unbounded and almost entirely content-free.** Haunt ticks far
+   faster than hourly. Millions of entries whose content is "time passed."
+4. **Drift is not a cause worth recording anyway.** "It drifted" explains
+   nothing. The explanatory events are the *discrete* ones.
+
+There is also no recapitulation argument here. Refolding under a changed
+interpretive frame is a property worth having for beliefs and memories, where
+what something *meant* is revisable. A being does not reinterpret what its hunger
+level was.
+
+### The principle
+
+> **Fold discrete state. Sample continuous state and log its discontinuities.**
+
+Practices fold because artifacts are discrete and countable. Drives should not,
+because drift is a continuous ambient process. That is not an inconsistency
+between the two halves of the library — it is the correct treatment of two
+different kinds of state, and the earlier "Embers is half-folded" finding
+over-generalized from one to the other.
+
+### What v0.3 does instead
+
+| | Treatment | Why |
+|---|---|---|
+| `Drive.level` | stays incrementally maintained | Required by the float constraint regardless |
+| **satiation** | **new causal log** | Discrete, rare, and the actual explanation |
+| **wear threshold crossings** | **new transition log** | Compact encoding of hysteresis; the discontinuities are the information |
+| `driveTrajectory` | unchanged | Already the right shape for "what was the level then" |
+
+Sketch:
+
+```ts
+export interface DriveSatiation {
+  atMs: number;
+  driveId: string;
+  before: number;
+  after: number;
+  /** Summed binding amounts before clamping. Divergence from after-before
+      is the clamping loss, which is itself explanatory. */
+  requested: number;
+  entry: IntegrationEvent | IntegrationAction;
+}
+
+export interface WearTransition {
+  atMs: number;
+  driveId: string;
+  from: "below" | "between" | "above";
+  to: "below" | "between" | "above";
+}
+```
+
+This yields complete attribution without a per-tick log:
+
+> *Connection is at 0.18 because it was 0.7 twenty-six hours ago, nothing has
+> satiated it since, and it drifts at −0.02/h.*
+
+### A note for the change-record spec
+
+The generalization is worth carrying across: **continuous processes should not be
+event-sourced; their discontinuities should be.** This is the same shape as the
+"a preprocessor may compress what it saw, never decide what it meant" rule for
+sensor streams — aggregate the continuous, record the discrete.
+
+### Constraints (unchanged)
 
 - **Behavior-preserving.** Golden tests pin current drive trajectories first; the
   refactor must reproduce them. Any divergence is a bug, not an improvement.
   These are written — `src/golden.test.ts`, 24 cases.
-- **Wear folds too.** `chronicLoad` has the same defect for the same reason.
+- **Wear gets a transition log, not a fold**, for the same reason as drives —
+  `chronicLoad` is derived from continuously-accumulated timers.
 - **Clamped non-commutativity is now load-bearing.** Levels are clamped to [0,1]
   with additive satiation and subtractive drift; near the bounds those do not
   commute. Ordering within a fold step must be defined explicitly rather than
