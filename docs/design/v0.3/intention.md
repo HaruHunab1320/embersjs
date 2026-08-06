@@ -353,12 +353,42 @@ Constraints:
 
 - **Behavior-preserving.** Golden tests pin current drive trajectories first; the
   refactor must reproduce them. Any divergence is a bug, not an improvement.
+  These are written — `src/golden.test.ts`, 24 cases.
 - **Wear folds too.** `chronicLoad` has the same defect for the same reason.
 - **Clamped non-commutativity is now load-bearing.** Levels are clamped to [0,1]
   with additive satiation and subtractive drift; near the bounds those do not
   commute. Ordering within a fold step must be defined explicitly rather than
   left to arrival order. See the finding filed against `CHANGE_RECORD_SPEC` —
   this is the same problem and should be settled once.
+- **The fold must replay incrementally, not compute closed-form.** Discovered
+  while writing the goldens, and it is the sharpest constraint of the three.
+
+### Why incremental replay is mandatory
+
+Drive level is produced today by repeated `level + rate × hours`, and the
+accumulated floating-point error is not cosmetic. Starting at 0.8 and drifting
+at −0.02/h for thirty hours:
+
+| | level after 30h | below the 0.2 critical threshold? |
+|---|---|---|
+| incremental (30 steps) | `0.19999999999999959` | **yes** |
+| closed form (`0.8 − 0.02 × 30`) | `0.20000000000000007` | **no** |
+
+The two agree to ten decimal places, so no tolerance-based test can tell them
+apart. But they fall on opposite sides of a threshold comparison, so the being
+enters chronic state an hour earlier under one and an hour later under the
+other — and every downstream wear number shifts with it. In the pinned 48-hour
+trajectory this is the difference between `chronicLoad` of 19/24 and 18/24.
+
+A fold that reconstructs level from a log by summing deltas in closed form is
+therefore **not** behavior-preserving, however mathematically cleaner it looks.
+Either replay step-by-step, or accept the divergence deliberately and update the
+goldens with the reason.
+
+This generalizes past this codebase: any event-sourced projection over a clamped
+or thresholded numeric is sensitive to replay granularity, and the sensitivity is
+invisible to approximate comparison. Worth carrying into the `clampedNumeric`
+component-kind discussion rather than rediscovering there.
 
 ---
 
