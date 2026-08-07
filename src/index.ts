@@ -133,6 +133,7 @@ export {
   mergeWearConfig,
   sustainedBelowMs,
   tickWear,
+  wearZone,
 } from "./wear/index.js";
 
 // ---------------------------------------------------------------------------
@@ -161,6 +162,7 @@ export type {
   DriftFunction,
   Drive,
   DriveConfig,
+  DriveSatiation,
   DriveStack,
   DriveStackConfig,
   DriveSummary,
@@ -197,5 +199,7 @@ export type {
   VoiceModule,
   WearConfig,
   WearState,
+  WearTransition,
+  WearZone,
   WeightedCandidate,
 } from "./types.js";

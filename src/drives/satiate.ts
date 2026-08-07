@@ -21,9 +21,17 @@ import { clamp01 } from "../util.js";
 export function satiateDrives(
   stack: DriveStack,
   entry: IntegrationEvent | IntegrationAction,
-): { stack: DriveStack; changes: Array<{ driveId: string; before: number; after: number }> } {
+): {
+  stack: DriveStack;
+  changes: Array<{ driveId: string; before: number; after: number; requested: number }>;
+} {
   const nextDrives = new Map<string, Drive>();
-  const changes: Array<{ driveId: string; before: number; after: number }> = [];
+  const changes: Array<{
+    driveId: string;
+    before: number;
+    after: number;
+    requested: number;
+  }> = [];
 
   for (const [id, drive] of stack.drives) {
     let totalSatiation = 0;
@@ -38,7 +46,9 @@ export function satiateDrives(
       const before = drive.level;
       const after = clamp01(drive.level + totalSatiation);
       nextDrives.set(id, { ...drive, level: after });
-      changes.push({ driveId: id, before, after });
+      // `requested` is reported unclamped so callers can see satiation that was
+      // discarded against the ceiling. after - before is what actually landed.
+      changes.push({ driveId: id, before, after, requested: totalSatiation });
     } else {
       nextDrives.set(id, drive);
     }

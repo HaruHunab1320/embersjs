@@ -277,9 +277,30 @@ export function deserializeBeing(data: SerializedBeing): Being {
     wear,
     pendingAttempts: cloneJson(data.pendingAttempts) as PracticeAttempt[],
     wearConfig,
-    history: cloneJson(data.history) as History,
+    history: deserializeHistory(data.history),
     elapsedMs: data.elapsedMs,
     metadata: data.metadata,
+  };
+}
+
+/**
+ * Rehydrates history, tolerating payloads written before a log existed.
+ *
+ * A blind cast would leave newer ring buffers `undefined` on an older payload,
+ * and the first `push` against one would throw — a crash on load rather than a
+ * degraded read. Each buffer is defaulted explicitly so adding a log stays a
+ * backward-compatible change.
+ */
+function deserializeHistory(data: History): History {
+  const cloned = cloneJson(data) as Partial<History>;
+  return {
+    driveTrajectory: cloned.driveTrajectory ?? [],
+    recentEntries: cloned.recentEntries ?? [],
+    practiceMilestones: cloned.practiceMilestones ?? [],
+    pressuredChoices: cloned.pressuredChoices ?? [],
+    notableTransitions: cloned.notableTransitions ?? [],
+    satiations: cloned.satiations ?? [],
+    wearTransitions: cloned.wearTransitions ?? [],
   };
 }
 

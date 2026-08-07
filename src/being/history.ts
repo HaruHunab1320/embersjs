@@ -17,12 +17,15 @@ import type {
   PressuredChoice,
   RecentEntry,
   Transition,
+  WearTransition,
 } from "../types.js";
 
 /** Default trajectory ring buffer capacity. */
 const DEFAULT_TRAJECTORY_CAPACITY = 1000;
 /** Default recentEntries ring buffer capacity. */
 const DEFAULT_RECENT_ENTRIES_CAPACITY = 200;
+/** Default capacity for the causal logs (satiations, wear transitions). */
+const DEFAULT_CAUSAL_LOG_CAPACITY = 200;
 
 const HOUR_MS = 3_600_000;
 const WEEK_MS = 7 * 24 * HOUR_MS;
@@ -43,6 +46,58 @@ export function recordTrajectoryPoint(being: Being, capacity = DEFAULT_TRAJECTOR
   being.history.driveTrajectory.push({ atMs: being.elapsedMs, levels });
   if (being.history.driveTrajectory.length > capacity) {
     being.history.driveTrajectory.shift();
+  }
+}
+
+/**
+ * Records caused drive changes. Mutates history in place.
+ *
+ * These are the discontinuities in an otherwise continuous process. Drift is
+ * deliberately not recorded — it is derivable from the drift parameters and
+ * elapsed time, and "it drifted" explains nothing that needs storing.
+ */
+export function recordSatiations(
+  being: Being,
+  changes: ReadonlyArray<{
+    driveId: string;
+    before: number;
+    after: number;
+    requested: number;
+  }>,
+  entry: IntegrationEvent | IntegrationAction,
+  capacity = DEFAULT_CAUSAL_LOG_CAPACITY,
+): void {
+  for (const change of changes) {
+    being.history.satiations.push({
+      atMs: being.elapsedMs,
+      driveId: change.driveId,
+      before: change.before,
+      after: change.after,
+      requested: change.requested,
+      entry,
+    });
+  }
+  while (being.history.satiations.length > capacity) {
+    being.history.satiations.shift();
+  }
+}
+
+/**
+ * Records wear zone crossings. Mutates history in place.
+ *
+ * Only transitions are stored, not per-tick zone occupancy — the crossing is
+ * the information, and the zone between crossings is implied.
+ */
+export function recordWearTransitions(
+  being: Being,
+  transitions: readonly WearTransition[],
+  capacity = DEFAULT_CAUSAL_LOG_CAPACITY,
+): void {
+  if (transitions.length === 0) return;
+
+  being.history.wearTransitions.push(...transitions);
+  while (being.history.wearTransitions.length > capacity) {
+    being.history.wearTransitions.shift();
   }
 }
 

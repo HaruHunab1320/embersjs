@@ -569,6 +569,51 @@ export interface Transition {
 }
 
 /**
+ * Which side of the wear thresholds a drive currently sits on.
+ *
+ * `between` is the hysteresis band: neither chronic-below time nor recovery
+ * time accrues there, which is what stops a drive hovering near a threshold
+ * from flip-flopping.
+ */
+export type WearZone = "below" | "between" | "above";
+
+/**
+ * A discrete, caused change to a drive level.
+ *
+ * Drive level is *not* reconstructed from these. Drift is continuous, and
+ * replaying it faithfully would need a record per tick — unbounded, and
+ * content-free, since "time passed" explains nothing. These capture the other
+ * half: the discontinuities. Together with the drift parameters and the sampled
+ * `driveTrajectory` they answer "why is this drive here" without a per-tick log.
+ *
+ * See docs/design/v0.3/intention.md, "The drive-state refactor".
+ */
+export interface DriveSatiation {
+  readonly atMs: number;
+  readonly driveId: string;
+  readonly before: number;
+  readonly after: number;
+  /**
+   * Summed binding amounts before clamping. When this exceeds `after - before`,
+   * the drive was already near full and the surplus was discarded — which is
+   * itself worth being able to see.
+   */
+  readonly requested: number;
+  /** What caused it. */
+  readonly entry: IntegrationEvent | IntegrationAction;
+}
+
+/** A drive crossing between wear zones — the discontinuity in a continuous process. */
+export interface WearTransition {
+  readonly atMs: number;
+  readonly driveId: string;
+  readonly from: WearZone;
+  readonly to: WearZone;
+  /** The level that triggered the crossing. */
+  readonly level: number;
+}
+
+/**
  * The record of a being's trajectory over time. Read by reflection,
  * attention weighting, and self-model assembly.
  */
@@ -583,6 +628,10 @@ export interface History {
   pressuredChoices: PressuredChoice[];
   /** Notable transitions. */
   notableTransitions: Transition[];
+  /** Caused drive changes, ring buffer (default capacity 200). */
+  satiations: DriveSatiation[];
+  /** Wear zone crossings, ring buffer (default capacity 200). */
+  wearTransitions: WearTransition[];
 }
 
 // ---------------------------------------------------------------------------

@@ -46,16 +46,52 @@ import type {
   PracticeAttempt,
   PracticeAttemptResult,
   SelfModel,
+  WearTransition,
+  WearZone,
   WeightedCandidate,
 } from "../types.js";
+import { wearZone } from "../wear/query.js";
 import { tickWear } from "../wear/tick.js";
 import {
   checkAndRecordMilestones,
   recordPressuredChoice,
   recordRecentEntry,
+  recordSatiations,
   recordTrajectoryPoint,
+  recordWearTransitions,
 } from "./history.js";
 import { buildSelfModel } from "./self-model.js";
+
+/** Current wear zone per drive, for detecting crossings across an operation. */
+function zoneSnapshot(being: Being): Map<string, WearZone> {
+  const zones = new Map<string, WearZone>();
+  for (const [id, drive] of being.drives.drives) {
+    zones.set(id, wearZone(drive.level, being.wearConfig));
+  }
+  return zones;
+}
+
+/**
+ * Zone crossings between a snapshot and the being's current levels.
+ *
+ * Both callers matter: drift moves a drive across a threshold during `tick`,
+ * and satiation moves it back during `integrate`. Attributing each crossing to
+ * the operation that caused it is the whole point of a causal log — recording
+ * both against ticks would make every satiation-driven recovery look like it
+ * happened for no reason.
+ */
+function crossingsSince(being: Being, before: ReadonlyMap<string, WearZone>): WearTransition[] {
+  const crossings: WearTransition[] = [];
+  for (const [id, drive] of being.drives.drives) {
+    const from = before.get(id);
+    if (from === undefined) continue;
+    const to = wearZone(drive.level, being.wearConfig);
+    if (from !== to) {
+      crossings.push({ atMs: being.elapsedMs, driveId: id, from, to, level: drive.level });
+    }
+  }
+  return crossings;
+}
 
 /**
  * Advances the being's state by `dtMs` milliseconds.
@@ -78,12 +114,17 @@ export function tick(being: Being, dtMs: number): void {
     depthsBefore.set(id, computeDepth(practice, being.elapsedMs));
   }
 
+  const zonesBefore = zoneSnapshot(being);
+
   // Advance drives and time
   being.drives = tickDrives(being.drives, dtMs);
   being.elapsedMs += dtMs;
 
   // Update wear (now that drive levels are post-drift)
   being.wear = tickWear(being.wear, being.drives, dtMs, being.wearConfig);
+
+  // Drift-caused zone crossings — the discontinuities in a continuous process.
+  recordWearTransitions(being, crossingsSince(being, zonesBefore));
 
   // Practice housekeeping
   tickPractices(being.practices, being.elapsedMs, being.wear, being.wearConfig.erosionFactor);
@@ -122,8 +163,17 @@ export function integrate(being: Being, input: IntegrationInput): IntegrationRes
   const underPressure = input.context?.pressured ?? pressingFromState.length > 0;
 
   // Satiate drives (the v0.1-style mechanic — drive levels rise on match)
+  const zonesBefore = zoneSnapshot(being);
   const { stack: nextDrives, changes: driveChanges } = satiateDrives(being.drives, entry);
   being.drives = nextDrives;
+
+  // The causal record. Drift is not logged; these discontinuities are what
+  // explain a drive level after the fact.
+  recordSatiations(being, driveChanges, entry);
+
+  // Satiation can lift a drive across a wear threshold, and the crossing belongs
+  // to the entry that caused it rather than to whichever tick happens next.
+  recordWearTransitions(being, crossingsSince(being, zonesBefore));
 
   // Record practice attempts (phase 1 — no depth change here)
   const pendingAttemptIds = recordAttempts(being, entry, underPressure, pressingDriveIds);

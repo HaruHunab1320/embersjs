@@ -2,7 +2,7 @@
  * Query helpers for inspecting wear state.
  */
 
-import type { WearConfig, WearState } from "../types.js";
+import type { WearConfig, WearState, WearZone } from "../types.js";
 
 /**
  * Returns true if the drive is currently in chronic state — sustained below
@@ -40,4 +40,19 @@ export function sustainedBelowMs(wear: WearState, driveId: string): number {
  */
 export function isCollapsed(wear: WearState, config: WearConfig): boolean {
   return wear.chronicLoad >= config.orientationCollapseThreshold;
+}
+
+/**
+ * Which wear zone a level sits in.
+ *
+ * Mirrors the branch structure of `tickTracker` exactly — below the critical
+ * threshold accrues chronic time, above the recovery threshold accrues
+ * recovery time, and the band between is the hysteresis hold where neither
+ * moves. Kept in one place so the transition log cannot disagree with the
+ * behavior it is describing.
+ */
+export function wearZone(level: number, config: WearConfig): WearZone {
+  if (level < config.criticalThreshold) return "below";
+  if (level > config.recoveryThreshold) return "above";
+  return "between";
 }

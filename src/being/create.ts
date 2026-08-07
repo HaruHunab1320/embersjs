@@ -35,6 +35,8 @@ export function createBeing(config: BeingConfig): Being {
       practiceMilestones: [],
       pressuredChoices: [],
       notableTransitions: [],
+      satiations: [],
+      wearTransitions: [],
     },
     elapsedMs: 0,
     metadata: config.metadata ?? {},
