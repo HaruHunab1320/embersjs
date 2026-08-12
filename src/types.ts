@@ -568,6 +568,109 @@ export interface Transition {
   readonly to: string;
 }
 
+// ---------------------------------------------------------------------------
+// Intention — latent pressure becoming something the being pursues
+// ---------------------------------------------------------------------------
+
+/**
+ * What would discharge a pressure, in terms the consuming framework can act on.
+ *
+ * **Opaque to Embers.** The being knows it wants something and holds a token for
+ * it; the framework knows what the token refers to and how to act on it. Same
+ * boundary as `PracticeAttemptResult` — the library refuses to interpret.
+ */
+export interface Satisfier {
+  /** Framework-defined category, e.g. "affordance" | "capability" | "movement". */
+  readonly kind: string;
+  /** Framework-resolvable reference. Embers never parses this. */
+  readonly ref: string;
+  readonly params?: Record<string, unknown>;
+}
+
+/** Why a latent pressure became available for consideration. */
+export type SurfacingTrigger =
+  /** The satisfier appeared in what the being is currently perceiving. */
+  | { readonly kind: "coincidence"; readonly note: string }
+  /** Nothing was demanding attention. */
+  | { readonly kind: "quiet" }
+  /** Pressure alone was sufficient. */
+  | { readonly kind: "threshold" };
+
+/**
+ * A latent pressure that has become an object the being can consider.
+ *
+ * Not yet a commitment — the being has noticed that it wants something. Most
+ * pressure never reaches this state, and of what does, most is declined.
+ */
+export interface SurfacedCandidate {
+  readonly id: string;
+  /** The drive it arose from. The attribution link. */
+  readonly sourceDriveId: string;
+  /** Constitutional — the drive owns this, not the moment. */
+  readonly satisfier: Satisfier;
+  /**
+   * What the being takes itself to want, in its own words.
+   *
+   * Authored by the framework at the moment of surfacing rather than declared
+   * on the drive: putting words to pressure is the cognitive act that surfacing
+   * *is*. Because the framework authors this while the drive owns the
+   * satisfier, the two can diverge — a being can misidentify its own want.
+   */
+  readonly aim: string;
+  readonly surfacedAtMs: number;
+  readonly trigger: SurfacingTrigger;
+}
+
+/** A standing commitment to act. Deliberately not a plan and not a goal. */
+export interface Intention {
+  readonly id: string;
+  /** Carried from the candidate this was committed from. */
+  readonly aim: string;
+  readonly sourceDriveId: string;
+  readonly satisfier: Satisfier;
+  /** So the surfacing reason stays reachable from the commitment. */
+  readonly fromCandidateId: string;
+  readonly formedAtMs: number;
+  /** Actions taken toward it so far. Feeds urgency decay. */
+  readonly attempts: number;
+}
+
+/** How a commitment stopped being one. Every terminal state carries its reason. */
+export type IntentionEnd =
+  | { readonly kind: "satisfied" }
+  | { readonly kind: "abandoned"; readonly reason: string }
+  | { readonly kind: "superseded"; readonly byIntentionId: string }
+  | { readonly kind: "expired" };
+
+/**
+ * The intention log. Current intentions are the fold of this.
+ *
+ * Folding is right here for the reason it is wrong for drive level: these are
+ * discrete events, not samples of a continuous process. Fold discrete state;
+ * sample continuous state and log its discontinuities.
+ */
+export type IntentionEvent =
+  | { readonly kind: "surfaced"; readonly atMs: number; readonly candidate: SurfacedCandidate }
+  | {
+      readonly kind: "committed";
+      readonly atMs: number;
+      readonly candidateId: string;
+      readonly intentionId: string;
+    }
+  | {
+      readonly kind: "declined";
+      readonly atMs: number;
+      readonly candidateId: string;
+      readonly reason: string;
+    }
+  | { readonly kind: "acted"; readonly atMs: number; readonly intentionId: string }
+  | {
+      readonly kind: "ended";
+      readonly atMs: number;
+      readonly intentionId: string;
+      readonly end: IntentionEnd;
+    };
+
 /**
  * Which side of the wear thresholds a drive currently sits on.
  *
@@ -632,6 +735,12 @@ export interface History {
   satiations: DriveSatiation[];
   /** Wear zone crossings, ring buffer (default capacity 200). */
   wearTransitions: WearTransition[];
+  /**
+   * The intention log. Current intentions are folded from this rather than
+   * stored, so "when did it decide that, and on what basis" is answerable by
+   * construction. Ring buffer (default capacity 500).
+   */
+  intentionLog: IntentionEvent[];
 }
 
 // ---------------------------------------------------------------------------

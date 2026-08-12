@@ -36,6 +36,7 @@ export function createBeing(config: BeingConfig): Being {
       pressuredChoices: [],
       notableTransitions: [],
       satiations: [],
+      intentionLog: [],
       wearTransitions: [],
     },
     elapsedMs: 0,

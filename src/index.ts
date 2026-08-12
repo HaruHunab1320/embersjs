@@ -121,6 +121,24 @@ export {
 } from "./metabolism/index.js";
 
 // ---------------------------------------------------------------------------
+// Intentions
+// ---------------------------------------------------------------------------
+
+export {
+  commit,
+  currentIntentions,
+  decline,
+  end,
+  MAX_COMMITTED_INTENTIONS,
+  pendingCandidates,
+  recentDeclines,
+  recordAction,
+  sourcePressure,
+  surface,
+  urgency,
+} from "./intentions/index.js";
+
+// ---------------------------------------------------------------------------
 // Wear
 // ---------------------------------------------------------------------------
 
@@ -174,6 +192,9 @@ export type {
   IntegrationEvent,
   IntegrationInput,
   IntegrationResult,
+  Intention,
+  IntentionEnd,
+  IntentionEvent,
   MetabolizeOptions,
   Orientation,
   Pattern,
@@ -192,9 +213,12 @@ export type {
   PressuredChoice,
   RecentEntry,
   SatiationBinding,
+  Satisfier,
   SelfModel,
   StateMatcher,
   Subscription,
+  SurfacedCandidate,
+  SurfacingTrigger,
   Transition,
   VoiceModule,
   WearConfig,

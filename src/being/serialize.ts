@@ -300,6 +300,7 @@ function deserializeHistory(data: History): History {
     pressuredChoices: cloned.pressuredChoices ?? [],
     notableTransitions: cloned.notableTransitions ?? [],
     satiations: cloned.satiations ?? [],
+    intentionLog: cloned.intentionLog ?? [],
     wearTransitions: cloned.wearTransitions ?? [],
   };
 }
