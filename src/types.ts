@@ -657,7 +657,22 @@ export interface SurfacedCandidate {
   readonly trigger: SurfacingTrigger;
 }
 
-/** A standing commitment to act. Deliberately not a plan and not a goal. */
+/**
+ * An **active pursuit** — something the being is doing now, because a pressure
+ * became pressing enough to take up.
+ *
+ * Deliberately not a plan and not a goal. A plan is a step sequence, which goes
+ * stale the moment the world moves. A goal is a desired world state, which
+ * still needs something to derive actions from. A pursuit carries its own
+ * reason, which is what makes the being legible: every action traces to a
+ * pursuit, every pursuit to a drive, every drive level to events.
+ *
+ * **Not a standing value.** "I intend to be a good host to this place" is a
+ * different kind of thing — it does not fade overnight, it does not compete for
+ * a slot, and a being holds many of them. This one decays with age and with
+ * attempts, and only a few are held at a time. If standing values are wanted
+ * later they are a second primitive, not a longer-lived version of this one.
+ */
 export interface Intention {
   readonly id: string;
   /** Carried from the candidate this was committed from. */

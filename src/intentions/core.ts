@@ -39,14 +39,28 @@ import type {
 const DEFAULT_INTENTION_LOG_CAPACITY = 500;
 
 /**
- * Maximum simultaneous commitments.
+ * Maximum simultaneous **active pursuits**.
  *
- * Not a principled number — a guard against the first version quietly becoming
- * a planner. A being holding a dozen commitments is running a task list.
+ * Small because an `Intention` is a thing the being is doing now, not a value
+ * it holds — see the note on {@link Intention} in types.ts. Three is not
+ * derived from anything; it is small enough that committing has to displace
+ * something, which is what keeps the adjudicator honest.
+ *
+ * Reaching the cap is a normal condition, not an error: `commit` supersedes the
+ * least urgent pursuit and records it. A framework that wants to decline
+ * instead can inspect `currentIntentions()` first — it is already sorted, so
+ * the last element is what would be displaced.
  */
 export const MAX_COMMITTED_INTENTIONS = 3;
 
-/** How long a commitment survives with no attempts before urgency floors out. */
+/**
+ * Age half-life for urgency.
+ *
+ * Six hours is active-pursuit pacing: something nobody has acted on since
+ * yesterday has stopped being a pursuit whatever the log says. A standing
+ * commitment would want a half-life measured in weeks, or none — which is
+ * precisely why the two are not the same primitive.
+ */
 const URGENCY_AGE_HALFLIFE_MS = 6 * 3_600_000;
 
 /** Diminishing return per failed attempt. */
@@ -106,10 +120,24 @@ export function surface(
 /**
  * Commits to a surfaced candidate. **Mutates** the being.
  *
- * Throws when the candidate is unknown or already resolved, and when the
- * commitment cap is reached — a caller at the cap should end or supersede
- * something first, and silently dropping the commitment would leave a hole in
- * the attribution chain.
+ * At {@link MAX_COMMITTED_INTENTIONS} this supersedes the least urgent pursuit
+ * rather than refusing. That is deliberate on two counts.
+ *
+ * Refusing would put the library in a judgment it has no standing to make: the
+ * framework is the adjudicator, and it knows things urgency cannot express —
+ * whether a satisfier is reachable right now, whether the being is somewhere it
+ * can act. A less urgent pursuit may be the only actionable one.
+ *
+ * And superseding is not silent. The displaced pursuit ends with
+ * `{ kind: "superseded", byIntentionId }`, so churn is visible in the log
+ * instead of being smuggled through a caught exception. A framework that
+ * commits carelessly is detectable by counting supersedes.
+ *
+ * A framework that would rather decline can inspect `currentIntentions()`
+ * first — it is sorted by urgency, so the last element is what would go.
+ *
+ * Throws only for genuine caller errors: an unknown candidate, or one already
+ * committed or declined.
  */
 export function commit(being: Being, candidateId: string, intentionId?: string): Intention {
   const candidate = findCandidate(being, candidateId);
@@ -120,15 +148,20 @@ export function commit(being: Being, candidateId: string, intentionId?: string):
     throw new Error(`Candidate "${candidateId}" was already committed or declined.`);
   }
 
+  const id = intentionId ?? nextId(being, "int");
+
+  // Sorted most-urgent-first, so the tail is what yields.
   const current = currentIntentions(being);
   if (current.length >= MAX_COMMITTED_INTENTIONS) {
-    throw new Error(
-      `Already holding ${current.length} commitments (max ${MAX_COMMITTED_INTENTIONS}). ` +
-        `End or supersede one before committing to "${candidateId}".`,
-    );
+    const displaced = current[current.length - 1]!;
+    append(being, {
+      kind: "ended",
+      atMs: being.elapsedMs,
+      intentionId: displaced.id,
+      end: { kind: "superseded", byIntentionId: id },
+    });
   }
 
-  const id = intentionId ?? nextId(being, "int");
   append(being, {
     kind: "committed",
     atMs: being.elapsedMs,

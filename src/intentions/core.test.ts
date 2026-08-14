@@ -128,15 +128,45 @@ describe("adjudication", () => {
     expect(() => decline(being, "ghost", "x")).toThrow(/unknown candidate/i);
   });
 
-  it("caps simultaneous commitments rather than silently dropping one", () => {
-    const being = makeBeing();
-    for (let i = 0; i < MAX_COMMITTED_INTENTIONS; i++) {
-      commit(being, surfaceOne(being, "connection", `aim ${i}`).id);
-    }
-    expect(currentIntentions(being)).toHaveLength(MAX_COMMITTED_INTENTIONS);
+  it("supersedes the least urgent pursuit at the cap rather than refusing", () => {
+    // Distinct drives so urgency ordering is unambiguous: pressure = target - level.
+    const being = makeBeing({ a: 0.1, b: 0.3, c: 0.5, d: 0.0 });
+    commit(being, surfaceOne(being, "a", "a").id);
+    commit(being, surfaceOne(being, "b", "b").id);
+    const weakest = commit(being, surfaceOne(being, "c", "c").id);
 
-    const extra = surfaceOne(being, "connection", "one too many");
-    expect(() => commit(being, extra.id)).toThrow(/max 3/i);
+    expect(currentIntentions(being).map((i) => i.aim)).toEqual(["a", "b", "c"]);
+
+    const incoming = commit(being, surfaceOne(being, "d", "d").id);
+
+    // "c" was least urgent and yielded; the cap is respected without a throw.
+    expect(currentIntentions(being)).toHaveLength(MAX_COMMITTED_INTENTIONS);
+    expect(currentIntentions(being).map((i) => i.aim)).toEqual(["d", "a", "b"]);
+
+    // And the displacement is in the log, not smuggled through an exception.
+    expect(being.history.intentionLog).toContainEqual(
+      expect.objectContaining({
+        kind: "ended",
+        intentionId: weakest.id,
+        end: { kind: "superseded", byIntentionId: incoming.id },
+      }),
+    );
+  });
+
+  it("lets a framework decline instead, by inspecting what would be displaced", () => {
+    const being = makeBeing({ a: 0.1, b: 0.3, c: 0.5 });
+    commit(being, surfaceOne(being, "a", "a").id);
+    commit(being, surfaceOne(being, "b", "b").id);
+    commit(being, surfaceOne(being, "c", "c").id);
+
+    const wouldDisplace = currentIntentions(being).at(-1)!;
+    expect(wouldDisplace.aim).toBe("c");
+
+    // Framework's call: not worth displacing anything.
+    const extra = surfaceOne(being, "a", "one too many");
+    decline(being, extra.id, `not worth displacing "${wouldDisplace.aim}"`);
+
+    expect(currentIntentions(being).map((i) => i.aim)).toEqual(["a", "b", "c"]);
   });
 });
 

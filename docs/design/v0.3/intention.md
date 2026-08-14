@@ -165,6 +165,29 @@ every commitment traces to a drive, every drive level traces to events.
 
 Poe does not plan the evening. He is committed to the fire being lit.
 
+### An active pursuit, not a standing value
+
+Sharpened during implementation, because this document originally said "standing
+commitment" while the code built something else — urgency halving every six hours
+is not how a value behaves.
+
+An `Intention` is **something the being is doing now**. *"I intend to be a good
+host to this place"* is a different kind of thing entirely:
+
+| | Active pursuit | Standing value |
+|---|---|---|
+| Decay | fast — hours | slow, or none |
+| How many at once | a few | many |
+| Competes for a slot | yes | no |
+| Ends | satisfied, abandoned, superseded, expired | rarely |
+
+They want opposite treatment on every row, which is why they cannot be one type
+with a tuning parameter. If standing values are wanted later they are a **second
+primitive**, not a longer-lived version of this one.
+
+The thin slice takes active pursuits, because the Empty Room tests whether a
+being *does* something unprompted — not whether it holds values.
+
 ### Urgency is folded, never stored
 
 There is no `urgency` field. It is computed on read:
@@ -227,8 +250,29 @@ Earlier framing said "stack," which implies push/pop and nesting — plan-shaped
 Commitments are not nested. A being can hold several at once and act on whichever
 is most urgent right now. Order is derived from urgency, not from arrival.
 
-**Thin-slice cap: at most 3 committed intentions.** Not a principled number — a
-guard against the first version quietly becoming a planner.
+**Cap: at most 3 active pursuits.** Three is not derived from anything. It is
+small enough that committing has to displace something, which is what keeps the
+adjudicator honest — and it is only defensible at all because these are pursuits
+rather than values.
+
+**Reaching the cap is a normal condition, not an error.** `commit` supersedes the
+least urgent pursuit and records
+`{ kind: "superseded", byIntentionId }`. An earlier draft threw instead, and that
+was wrong twice over:
+
+- It put the library in a judgment it has no standing to make. The framework is
+  the adjudicator and knows things urgency cannot express — whether a satisfier
+  is reachable right now, whether the being is anywhere it could act. The least
+  urgent pursuit may be the only actionable one.
+- It hid churn. A caught exception leaves no trace; a supersede record does, so a
+  framework that commits carelessly is detectable by counting them.
+
+A framework that would rather decline can inspect `currentIntentions()` first —
+it is sorted by urgency, so the last element is what would go.
+
+The tell that the throw was wrong: `IntentionEnd` already had a `superseded`
+variant and nothing in the library produced it. The exit had been designed and
+then wired shut.
 
 ---
 
