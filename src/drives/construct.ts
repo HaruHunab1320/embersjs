@@ -38,6 +38,7 @@ export function createDrive(config: DriveConfig): Drive {
     target: clamp01(config.target),
     drift: config.drift,
     satiatedBy: config.satiatedBy,
+    pursuableBy: config.pursuableBy,
   };
 }
 

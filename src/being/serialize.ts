@@ -41,6 +41,7 @@ import type {
   PracticeProtocol,
   PracticeSubstrate,
   PracticeTrigger,
+  Pursuable,
   SatiationBinding,
   Subscription,
   WearConfig,
@@ -72,6 +73,12 @@ interface SerializedDrive {
   target: number;
   drift: SerializedDrift;
   satiatedBy: SerializedSatiationBinding[];
+  /**
+   * Pursuables roundtrip in full, unlike satiation bindings — a Satisfier is an
+   * opaque JSON token by construction, with no predicate to lose. A being that
+   * came back unable to pursue anything would be silently inert.
+   */
+  pursuableBy?: Pursuable[];
 }
 
 interface SerializedDriveStack {
@@ -162,6 +169,7 @@ function serializeDriveStack(stack: DriveStack): SerializedDriveStack {
       target: d.target,
       drift: serializeDrift(d.drift),
       satiatedBy: d.satiatedBy.map(serializeSatiationBinding),
+      pursuableBy: d.pursuableBy ? cloneJson(d.pursuableBy as Pursuable[]) : undefined,
     });
   }
   return {
@@ -321,6 +329,7 @@ function deserializeDriveStack(s: SerializedDriveStack): DriveStack {
         matches: { kind: b.matches.kind, type: b.matches.type },
         amount: b.amount,
       })) as readonly SatiationBinding[],
+      pursuableBy: d.pursuableBy ? (cloneJson(d.pursuableBy) as Pursuable[]) : undefined,
     });
   }
   return {

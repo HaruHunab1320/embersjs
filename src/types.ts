@@ -101,6 +101,42 @@ export interface Drive {
   readonly drift: DriftFunction;
   /** What events or actions satisfy this drive. */
   readonly satiatedBy: readonly SatiationBinding[];
+  /**
+   * What the being could *do* about this drive, as opposed to what would
+   * satisfy it if it happened to arrive.
+   *
+   * `satiatedBy` is receivable — a pattern over entries the world delivers.
+   * Nothing in it is addressable by the being, which is why a v0.2 drive can
+   * press forever without the being ever pursuing anything.
+   *
+   * Optional. A drive without it still presses, still colors state, and still
+   * gates capabilities — it simply stays latent forever, which is the correct
+   * default and describes most drives most of the time.
+   */
+  readonly pursuableBy?: readonly Pursuable[];
+}
+
+/**
+ * An addressable way to reduce a drive's pressure.
+ *
+ * Deliberately carries no `aim`. What the being takes itself to want is
+ * authored by the framework at the moment of surfacing, because putting words
+ * to a pressure is a cognitive act performed in a situation — a static string
+ * declared once in a config reads as canned across a long run, and cannot
+ * diverge from the satisfier in the way a real misidentified want does.
+ */
+export interface Pursuable {
+  /** Opaque token the framework resolves. Constitutional — owned by the drive. */
+  readonly satisfier: Satisfier;
+  /**
+   * Weighted pressure above which this becomes eligible to surface.
+   * Defaults to {@link DEFAULT_SURFACING_THRESHOLD}.
+   */
+  readonly threshold?: number;
+  /**
+   * Optional context for whoever authors the aim. **Not** the aim itself.
+   */
+  readonly hint?: string;
 }
 
 /**
@@ -979,6 +1015,8 @@ export interface DriveConfig {
   readonly target: number;
   readonly drift: DriftFunction;
   readonly satiatedBy: readonly SatiationBinding[];
+  /** What the being could do about this drive. Optional; see {@link Drive.pursuableBy}. */
+  readonly pursuableBy?: readonly Pursuable[];
 }
 
 /**

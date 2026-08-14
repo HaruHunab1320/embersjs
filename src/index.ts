@@ -124,10 +124,14 @@ export {
 // Intentions
 // ---------------------------------------------------------------------------
 
+export type { EligibilityOptions, SurfacingEligibility } from "./intentions/index.js";
 export {
   commit,
   currentIntentions,
+  DEFAULT_DECLINE_COOLDOWN_MS,
+  DEFAULT_SURFACING_THRESHOLD,
   decline,
+  eligibleToSurface,
   end,
   MAX_COMMITTED_INTENTIONS,
   pendingCandidates,
@@ -211,6 +215,7 @@ export type {
   PracticeSummary,
   PracticeTrigger,
   PressuredChoice,
+  Pursuable,
   RecentEntry,
   SatiationBinding,
   Satisfier,
