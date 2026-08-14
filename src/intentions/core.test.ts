@@ -6,8 +6,10 @@ import type { Being, BeingConfig, Satisfier, SurfacingTrigger } from "../types.j
 import {
   commit,
   currentIntentions,
+  DEFAULT_MAX_ATTEMPTS,
   decline,
   end,
+  expireStalePursuits,
   MAX_COMMITTED_INTENTIONS,
   pendingCandidates,
   recentDeclines,
@@ -307,5 +309,97 @@ describe("serialization", () => {
     const restored = deserializeBeing(serialized);
     expect(restored.history.intentionLog).toEqual([]);
     expect(() => surfaceOne(restored)).not.toThrow();
+  });
+});
+
+describe("expiry", () => {
+  it("expires a pursuit whose drive was satisfied by other means", () => {
+    const being = makeBeing({ connection: 0.3 });
+    const intention = commit(being, surfaceOne(being).id);
+    expect(expireStalePursuits(being)).toHaveLength(0);
+
+    integrate(being, { entry: { kind: "event", type: "greeted" } });
+
+    const expired = expireStalePursuits(being);
+    expect(expired.map((i) => i.id)).toEqual([intention.id]);
+    expect(currentIntentions(being)).toHaveLength(0);
+    expect(being.history.intentionLog.at(-1)).toMatchObject({
+      kind: "ended",
+      end: { kind: "expired" },
+    });
+  });
+
+  it("expires a pursuit that has aged out untouched", () => {
+    const being = makeBeing({ connection: 0.3 });
+    commit(being, surfaceOne(being).id);
+
+    // pressure 0.5; needs ~4.6 half-lives to fall under the 0.02 floor
+    tick(being, 5 * 6 * HOUR);
+    expect(expireStalePursuits(being)).toHaveLength(1);
+  });
+
+  it("keeps a fresh pursuit on a pressing drive", () => {
+    const being = makeBeing({ connection: 0.0 });
+    commit(being, surfaceOne(being).id);
+
+    tick(being, HOUR);
+    expect(expireStalePursuits(being)).toHaveLength(0);
+    expect(currentIntentions(being)).toHaveLength(1);
+  });
+
+  it("lapses an unsatisfiable pursuit even while its drive stays pressing", () => {
+    // Pressure stays at 0.8, so urgency never approaches the floor. Without the
+    // attempt cap the being would retry the same impossible thing forever.
+    const being = makeBeing({ connection: 0.0 });
+    const intention = commit(being, surfaceOne(being).id);
+
+    for (let i = 0; i < DEFAULT_MAX_ATTEMPTS - 1; i++) {
+      recordAction(being, intention.id);
+    }
+    expect(expireStalePursuits(being)).toHaveLength(0);
+
+    recordAction(being, intention.id);
+    expect(expireStalePursuits(being).map((i) => i.id)).toEqual([intention.id]);
+  });
+
+  it("honors overridden thresholds", () => {
+    const being = makeBeing({ connection: 0.0 });
+    const intention = commit(being, surfaceOne(being).id);
+    recordAction(being, intention.id);
+
+    expect(expireStalePursuits(being, { maxAttempts: 1 })).toHaveLength(1);
+
+    const other = makeBeing({ connection: 0.0 });
+    commit(other, surfaceOne(other).id);
+    expect(expireStalePursuits(other, { urgencyFloor: 1 })).toHaveLength(1);
+  });
+
+  it("is idempotent — nothing is expired twice", () => {
+    const being = makeBeing({ connection: 0.3 });
+    commit(being, surfaceOne(being).id);
+    integrate(being, { entry: { kind: "event", type: "greeted" } });
+
+    expect(expireStalePursuits(being)).toHaveLength(1);
+    expect(expireStalePursuits(being)).toHaveLength(0);
+    expect(
+      being.history.intentionLog.filter((e) => e.kind === "ended" && e.end.kind === "expired"),
+    ).toHaveLength(1);
+  });
+
+  it("frees a slot so the cap stops displacing live pursuits", () => {
+    const being = makeBeing({ a: 0.0, b: 0.0, c: 0.79, d: 0.0 });
+    commit(being, surfaceOne(being, "a", "a").id);
+    commit(being, surfaceOne(being, "b", "b").id);
+    commit(being, surfaceOne(being, "c", "c").id); // pressure 0.01, under the floor
+
+    expect(expireStalePursuits(being).map((i) => i.aim)).toEqual(["c"]);
+
+    // The slot is free, so "d" no longer displaces a live pursuit.
+    commit(being, surfaceOne(being, "d", "d").id);
+    expect(
+      currentIntentions(being)
+        .map((i) => i.aim)
+        .sort(),
+    ).toEqual(["a", "b", "d"]);
   });
 });

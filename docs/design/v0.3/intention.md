@@ -1,6 +1,8 @@
 # v0.3 — Intention, and the gap
 
-**Status:** Draft — pending review before implementation. No API is committed.
+**Status:** Implemented in `src/intentions/`. 181 tests, all 24 goldens
+unchanged. Version bumped to 0.3.0 and **not yet published** — the API is
+reversible until it is.
 **Scope:** One primitive (intention) and one refactor (fold the drive state that
 explains it). Deliberately narrow.
 **Backward compatibility:** Additive for intentions. The drive-state refactor is
@@ -26,7 +28,7 @@ v0.3 adds that place, as **three states rather than two**:
 |---|---|---|
 | **Latent** | Pressure biases attention, gates capabilities, colors tone. Never articulated. | **Yes** |
 | **Surfaced** | The impulse becomes an object the being can consider. It acquires an `aim`. | No |
-| **Committed** | Taken up as a standing intention, acted toward, terminated in a recorded way. | No |
+| **Committed** | Taken up as an active pursuit, acted toward, terminated in a recorded way. | No |
 
 This is a correction to an earlier finding. "Drives modulate expression, not
 action" identified a real defect, but misdiagnosed it: modulation is not the
@@ -129,7 +131,8 @@ export interface SurfacedCandidate {
   trigger: SurfacingTrigger;
 }
 
-/** A standing commitment to act. Not a plan, and not a goal. */
+/** An active pursuit — something the being is doing now. Not a plan, not a goal,
+ *  and not a standing value. See "An active pursuit, not a standing value". */
 export interface Intention {
   id: string;
   /** Carried from the candidate this was committed from. */
@@ -292,7 +295,7 @@ LATENT — drive presses continuously
                  ├─ decline → recorded, being returns to acting from latent pressure
                  └─ commit
                       │
-                 COMMITTED — a standing intention
+                 COMMITTED — an active pursuit
                       └─ acted toward over many ticks
                            └─ ends: satisfied | abandoned | superseded | expired
 ```
@@ -565,9 +568,16 @@ inside one.
    it couples two systems that should be proven separately first. Note that the
    witness-raises-surfacing extension is the *reverse* coupling, and is the more
    promising of the two.
-3. **Expiry policy.** Age-based, attempt-based, or urgency-floor. Attempt-based
-   is most honest (a commitment repeatedly failed should lapse) but needs the
-   host to report attempts accurately.
+3. ~~**Expiry policy.**~~ **Settled: urgency floor, plus an attempt cap as a
+   safety valve.** The floor subsumes the other candidates, because urgency
+   already combines pressure, age and attempts — a drive satisfied by other
+   means, a pursuit nobody touched, and one repeatedly failed all decay through
+   the same term. The attempt cap covers the one case it misses: an
+   *unsatisfiable* pursuit on a severely unmet drive, where pressure keeps
+   urgency above any sane floor while the being retries forever. Expiry is
+   explicit (`expireStalePursuits`) rather than folded into `tick`, matching
+   `expirePendingAttempts` — the thresholds are policy, and policy belongs to
+   the framework.
 4. **Should surfaced-but-declined candidates be remembered?** A being that
    declines the same impulse repeatedly is exhibiting something — either good
    judgment or avoidance, and the two look identical from one instance. The rule

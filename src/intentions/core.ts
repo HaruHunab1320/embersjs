@@ -218,6 +218,70 @@ export function end(being: Being, intentionId: string, endState: IntentionEnd): 
   append(being, { kind: "ended", atMs: being.elapsedMs, intentionId, end: endState });
 }
 
+/**
+ * Urgency below which a pursuit is considered dead.
+ *
+ * Not zero, because urgency approaches zero asymptotically — it decays by
+ * multiplication and never arrives. Without a floor a stale pursuit sits in the
+ * live set forever at a vanishing urgency, occupying a slot it will never use.
+ */
+export const DEFAULT_URGENCY_FLOOR = 0.02;
+
+/**
+ * Attempts after which a pursuit lapses regardless of urgency.
+ *
+ * The urgency floor handles the ordinary death: pressure falls, or age and
+ * failed attempts erode it. It does not handle an *unsatisfiable* pursuit on a
+ * severely unmet drive, where pressure stays high enough to keep urgency above
+ * any sane floor while the being tries the same impossible thing forever. A
+ * satisfier that no longer resolves is the obvious way to get there.
+ */
+export const DEFAULT_MAX_ATTEMPTS = 5;
+
+export interface ExpiryOptions {
+  /** Overrides {@link DEFAULT_URGENCY_FLOOR}. */
+  readonly urgencyFloor?: number;
+  /** Overrides {@link DEFAULT_MAX_ATTEMPTS}. */
+  readonly maxAttempts?: number;
+}
+
+/**
+ * Ends pursuits that have gone stale. **Mutates** the being. Returns what it
+ * expired, so the caller can react rather than discover it later.
+ *
+ * Explicit rather than folded into `tick`, matching `expirePendingAttempts`:
+ * the thresholds are policy, and policy belongs to the framework. Expected to
+ * be called on a regular cadence.
+ *
+ * A pursuit lapses when its urgency has fallen below the floor — which covers
+ * the drive being satisfied by other means, the pursuit ageing out, and
+ * attempts eroding it — or when it has been attempted too many times to still
+ * be plausible.
+ *
+ * Note that an attempt recorded against a *live* pursuit is by definition one
+ * that did not discharge it; a successful pursuit ends as `satisfied`. So the
+ * attempt count is a failure count, which is what makes the cap meaningful.
+ */
+export function expireStalePursuits(being: Being, options: ExpiryOptions = {}): Intention[] {
+  const floor = options.urgencyFloor ?? DEFAULT_URGENCY_FLOOR;
+  const maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+
+  const expired = currentIntentions(being).filter(
+    (intention) => urgency(being, intention) < floor || intention.attempts >= maxAttempts,
+  );
+
+  for (const intention of expired) {
+    append(being, {
+      kind: "ended",
+      atMs: being.elapsedMs,
+      intentionId: intention.id,
+      end: { kind: "expired" },
+    });
+  }
+
+  return expired;
+}
+
 // ---------------------------------------------------------------------------
 // The fold
 // ---------------------------------------------------------------------------

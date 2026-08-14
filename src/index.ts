@@ -124,7 +124,11 @@ export {
 // Intentions
 // ---------------------------------------------------------------------------
 
-export type { EligibilityOptions, SurfacingEligibility } from "./intentions/index.js";
+export type {
+  EligibilityOptions,
+  ExpiryOptions,
+  SurfacingEligibility,
+} from "./intentions/index.js";
 export {
   commit,
   currentIntentions,
