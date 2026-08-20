@@ -3,9 +3,10 @@ import { createBeing } from "../being/create.js";
 import { integrate, tick } from "../being/lifecycle.js";
 import { deserializeBeing, serializeBeing } from "../being/serialize.js";
 import type { Being, BeingConfig, Pursuable, Satisfier } from "../types.js";
-import { commit, decline, surface } from "./core.js";
+import { commit, decline, end, surface } from "./core.js";
 import {
   DEFAULT_DECLINE_COOLDOWN_MS,
+  DEFAULT_SATISFIED_COOLDOWN_MS,
   DEFAULT_SURFACING_THRESHOLD,
   eligibleToSurface,
 } from "./eligibility.js";
@@ -243,5 +244,65 @@ describe("serialization", () => {
 
     expect(restored.drives.drives.get("connection")!.pursuableBy).toBeUndefined();
     expect(eligibleToSurface(restored)).toHaveLength(0);
+  });
+});
+
+describe("satisfied cooldown", () => {
+  it("suppresses a just-satisfied pairing, then offers it again", () => {
+    const being = makeBeing([
+      { id: "connection", level: 0.1, pursuableBy: [{ satisfier: HEARTH }] },
+    ]);
+
+    const candidate = surface(being, {
+      sourceDriveId: "connection",
+      satisfier: HEARTH,
+      aim: "tend the fire",
+      trigger: { kind: "quiet" },
+    });
+    const intention = commit(being, candidate.id);
+    end(being, intention.id, { kind: "satisfied" });
+
+    // Still pressing — satisfaction of the pursuit is not discharge of the
+    // drive. Without the cooldown this pairing would surface again immediately
+    // and monopolize the being's attention.
+    expect(eligibleToSurface(being)).toHaveLength(0);
+
+    tick(being, DEFAULT_SATISFIED_COOLDOWN_MS + HOUR);
+    expect(eligibleToSurface(being)).toHaveLength(1);
+  });
+
+  it("does not suppress after an abandoned or expired ending", () => {
+    const being = makeBeing([
+      { id: "connection", level: 0.1, pursuableBy: [{ satisfier: HEARTH }] },
+    ]);
+
+    const candidate = surface(being, {
+      sourceDriveId: "connection",
+      satisfier: HEARTH,
+      aim: "tend the fire",
+      trigger: { kind: "quiet" },
+    });
+    const intention = commit(being, candidate.id);
+    end(being, intention.id, { kind: "abandoned", reason: "gave up" });
+
+    // Giving up is not doing — there is nothing to sit with.
+    expect(eligibleToSurface(being)).toHaveLength(1);
+  });
+
+  it("a zero cooldown disables satisfied suppression", () => {
+    const being = makeBeing([
+      { id: "connection", level: 0.1, pursuableBy: [{ satisfier: HEARTH }] },
+    ]);
+
+    const candidate = surface(being, {
+      sourceDriveId: "connection",
+      satisfier: HEARTH,
+      aim: "tend the fire",
+      trigger: { kind: "quiet" },
+    });
+    const intention = commit(being, candidate.id);
+    end(being, intention.id, { kind: "satisfied" });
+
+    expect(eligibleToSurface(being, { satisfiedCooldownMs: 0 })).toHaveLength(1);
   });
 });

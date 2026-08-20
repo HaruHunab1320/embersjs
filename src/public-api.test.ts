@@ -43,6 +43,7 @@ const INTENTION_EXPORTS = [
   "DEFAULT_MAX_ATTEMPTS",
   "DEFAULT_SURFACING_THRESHOLD",
   "DEFAULT_DECLINE_COOLDOWN_MS",
+  "DEFAULT_SATISFIED_COOLDOWN_MS",
 ] as const;
 
 /** A representative slice of the pre-existing surface, so a barrel edit cannot quietly drop it. */
